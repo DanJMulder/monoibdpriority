@@ -13,7 +13,7 @@ This pipeline is was designed and tested on WES VCF files aligned to both the GR
 1. A local instance of dbNSFP (version 4.1a, https://sites.google.com/site/jpopgen/dbNSFP)
 2. A local instance of annovar (2019Oct24 version, https://annovar.openbioinformatics.org/en/latest/user-guide/download/) with the gnomad211_exome and refGene databases for both GRCh37 and GRCh38 attached.
 3. A local instance of CADD (v1.6, https://github.com/kircherlab/CADD-scripts/)
-4. A local 
+4. A local copy of the gene constraint metrics from gnomAD (v 2.1.1, https://gnomad.broadinstitute.org/downloads#v2-constraint)
 
 This pipeline consists of 3 steps:
 Step 1. Family member VCFs are processed into the appropriate format to allow inheritance modelling
@@ -22,4 +22,4 @@ Step 3. Inheritance modeling for each variant where family members are available
 
 This pipeline can accept a singleton VCF file, but including one or both parent VCFs can highly increase the diagnostic yield. In step 3, adding the affectation status of the parents (if diagnosed with IBD) and the sex of the proband will also add to to the likelihood of identifying a disease causing variant.
 
-In our cohort, VCFs with 100,000-150,000 variant calls were filtered down to an average of 15 variant calls per patient without removing any of the known disease causing variants.
+The pipeline produces a table of a short list of variants that meet the filtration criteria (output filename "{patient_id}_filtered.csv"). In our cohort, VCFs with 100,000-150,000 variant calls were filtered down to an average of 15 variant calls per patient without removing any of the known disease causing variants. In addition, the pipeline also produces a full table without any variants removed, but with full annotation and inheritance modeling as above, to allow for further well-informed manula curation and analysis of variants (output filename "{patient_id}_unfiltered.csv").
