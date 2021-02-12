@@ -1,4 +1,4 @@
-# monoibdpriority
+# Variant Prioritization for Monogenic IBD Diagnosis
 
 Background
 Genetic sequencing is increasingly used to diagnose monogenic disease. Genetic diagnosis can be highly beneficial to patients - informing prognosis, inheritance, and especially allowing for targeted therapy. Patients presenting with clinical features of very early onset inflammatory bowel disease (VEO-IBD) are "highly recommended" to undergo genetic sequencing analysis (Kelsen et al. JPGN. 2020;70(3);389-403).
