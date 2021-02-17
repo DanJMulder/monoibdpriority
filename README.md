@@ -3,12 +3,12 @@
 ## Background
 Genetic sequencing is increasingly used to diagnose monogenic disease. Genetic diagnosis can be highly beneficial to patients - informing prognosis, inheritance, and especially allowing for targeted therapy. Patients presenting with clinical features of very early onset inflammatory bowel disease (VEO-IBD) are "highly recommended" to undergo genetic sequencing analysis (Kelsen et al. JPGN. 2020;70(3);389-403).
 
-Project Rationale
+## Project Rationale
 We have accrued a large cohort of pediatric patients with IBD (n = 1004 probands). Patients and available family members underwent whole exome sequencing (WES). Initially, we performed manual analysis for variants suspicous for causing monogenic disease. As we have previously reported, we were able to verify 38 disease causing monogenic variants (~3% of the cohort) through functional laboratory testing (Crowley et al. Gastroenterology. 2020;158(8):2208-2220).
 
 In the study related to this repository, we used statistical analysis of our large cohort WES data to identify a small set of characteristics of in silico predictive features of a variant that were highly predictive of a disease causing variant.
 
-Pipeline Overview
+## Pipeline Overview
 This pipeline is was designed and tested on WES VCF files aligned to both the GRCh37 and GRCh38 reference genomes. This pipeline has not been tested on whole genome sequencing or gene panel files. Raw WES VCFs should be filtered for quality separately prior to using this pipeline. The default is set to GRCh38. Dependencies for annotating VCFs are:
 1. A local instance of dbNSFP (version 4.1a, https://sites.google.com/site/jpopgen/dbNSFP)
 2. A local instance of annovar (2019Oct24 version, https://annovar.openbioinformatics.org/en/latest/user-guide/download/) with the gnomad211_exome and refGene databases for both GRCh37 and GRCh38 attached.
