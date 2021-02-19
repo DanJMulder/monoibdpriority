@@ -10,6 +10,7 @@ In the study related to this repository, we used statistical analysis of our lar
 
 ## Pipeline Overview
 Input: proband VCF +/- one or both parental VCFs
+
 Output: annotated VCF-style files as comma separated value files (both filtered+prioritizes and unfiltered versions for further manual curation/analysis)
 
 This pipeline is was designed and tested on WES VCF files aligned to both the GRCh37 and GRCh38 reference genomes. This pipeline has not been tested on whole genome sequencing (WGS) or gene panel files. Raw WES VCFs should be filtered for quality separately prior to using this pipeline. The scripts assume the VCFs are aligned to GRCh38 but this can be manually adjusted for each annotation (dbNSFP, Annovar, CADD, gene lists).
