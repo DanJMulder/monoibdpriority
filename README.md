@@ -20,7 +20,7 @@ Dependencies for annotating VCFs are:
 3. A local instance of CADD annotation tool (v1.6, https://github.com/kircherlab/CADD-scripts/)
 4. A local copy of the gene constraint metrics from gnomAD (v 2.1.1, https://gnomad.broadinstitute.org/downloads#v2-constraint)
 
-Required software packages are listed at the beginning of each script and can be installed using the "install.packages()" function
+Required software packages are listed at the beginning of each script and can be installed using the `install.packages()` function
 
 This pipeline consists of 3 steps:
 Step 1 - Family member VCF Processing. Processed into the appropriate format to remove unused data and allow inheritance modelling.
@@ -29,4 +29,4 @@ Step 3 - Inheritance modeling. For each variant where family members are availab
 
 This pipeline can accept a singleton VCF file, but including one or both parent VCFs can highly increase the diagnostic yield. In step 3, adding the affectation status of the parents (if diagnosed with IBD) and the sex of the proband will also increase the likelihood of identifying a disease causing variant.
 
-The pipeline produces a table of a short list of variants that meet the filtration criteria (output filename "{patient_id}_filtered.csv"). In our cohort, VCFs with 100,000-150,000 variant calls were filtered down to an average of 15 variant calls per patient without removing any of the known disease causing variants. In addition, the pipeline also produces a full table without any variants removed, but with full annotation and inheritance modeling as above, to allow for further well-informed manual curation and analysis of variants (output filename "{patient_id}_unfiltered.csv").
+The pipeline produces a table of a short list of variants that meet the filtration criteria (output filename `{patient_id}_filtered.csv"`). In our cohort, VCFs with 100,000-150,000 variant calls were filtered down to an average of 15 variant calls per patient without removing any of the known disease causing variants. In addition, the pipeline also produces a full table without any variants removed, but with full annotation and inheritance modeling as above, to allow for further well-informed manual curation and analysis of variants (output filename `{patient_id}_unfiltered.csv`).
