@@ -20,13 +20,14 @@ Dependencies for annotating VCFs are:
 2. A local instance of annovar (2019Oct24 version, https://annovar.openbioinformatics.org/en/latest/user-guide/download/) with the gnomad211_exome and refGene databases for the appropriate reference genome attached.
 3. A local instance of CADD annotation tool (v1.6, https://github.com/kircherlab/CADD-scripts/)
 4. A local copy of the gene constraint metrics from gnomAD (v 2.1.1, https://gnomad.broadinstitute.org/downloads#v2-constraint)
+5. A local copy of the bed files containing the relevant gene co-ordinates
 
 Required software packages are listed at the beginning of each script and can be installed using the `install.packages()` function.
 
 This pipeline consists of 3 steps:
 Step 1 - Family member VCF Processing. Processed into the appropriate format to remove unused data and allow inheritance modelling.
 Step 2 - Proband VCF annotation. Includes a dbNSFP custom damaging score count, refSeq gene details, minor allele frequency (via gnomad versiona 2.1.1), CADD score, and LOEUF.
-Step 3 - Inheritance modeling. For each variant where family members are available, and variant filtering and prioritization based on features likely to identify a disease causing variant.
+Step 3 - Inheritance modeling. For each variant where family members are available, and variant filtering and prioritization based on features likely to identify a disease causing variant. Filtering and prioritization parameters can be adjusted by the user to improve identification of a monogenic variant.
 
 This pipeline can accept a singleton VCF file, but including one or both parent VCFs can highly increase the diagnostic yield. In step 3, adding the affectation status of the parents (if diagnosed with IBD) and the sex of the proband will also increase the likelihood of identifying a disease causing variant.
 
