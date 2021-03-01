@@ -24,7 +24,7 @@ Dependencies for annotating VCFs are:
 
 Required software packages are listed at the beginning of each script and can be installed using the `install.packages()` function.
 
-This pipeline consists of 3 steps:
+Running this pipeline consists of 3 steps, which are separated into 3 numbered R scripts:
 1. Family member VCF Processing. Processed into the appropriate format to remove unused data and allow inheritance modelling.
 2. Proband VCF annotation. Includes a dbNSFP custom damaging score count, refSeq gene details, minor allele frequency (via gnomad versiona 2.1.1), CADD score, and LOEUF.
 3. Inheritance modeling. For each variant where family members are available, and variant filtering and prioritization based on features likely to identify a disease causing variant. Filtering and prioritization parameters can be adjusted by the user to improve identification of a monogenic variant.
