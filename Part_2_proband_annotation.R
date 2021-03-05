@@ -2,19 +2,34 @@
 ##  Written by Daniel Mulder, February 2021
 #   Part 2 Proband VCF Annotation
 
+
+# Packages
+library(plyr)
+library(tidyverse)
+library(choiceDes) #for saving delim (.in) files
+library(pgirmess) #for saving to delim files
+library(glue) #for interpreting string literals
+library(data.table) #for the foverlaps function used in gene_lists step 7
+
+
 # To use this script, the following user changes are needed (beyond the dependencies listed in the readme file):
-  # 1. input the local path to the folder containing the proband VCFs to process (to replace "path/to/files" in 1 place below)
-    # the folder should contain only the VCF files to be processed
-  # 2. change the "skip" argument in the read_delim() function below depending on how many header rows need to be skipped in the VCF
-  # 3. input the local path to the folder containing the dbNSFP4.1a java applet /path/to/dbNSFP4.1a/ in 2 places below
-  # 4. input the local path to the folder containing the annovar libraries /path/to/annovar in 4 places below
-  # 5. input the local path to the folder containing the CADD scripts /path/to/cadd in 1 place below
-  # 6. input the local path to the folder containing the LOEUF table downloaded from gnomAD /path/to/LOEUF in 1 place below
-  # 7. the 4 .bed files in the repository should be downloaded and placed in the local home directory
+  # 1. change "/path/to/files" on the line below to the local path to the folder containing only the proband VCFs
+      path_to_files <- "path/to/files"
+  # 2. change the "number_of_header_rows" variable on the line below to how many header rows in your VCFs (that need to be skipped)
+      skip <- number_of_header_rows
+  # 3. change "/path/to/dbNSFP4.1a" on the line below to the local path to the folder containing the dbNSFP4.1a java applet
+      path_to_dbNSFP4.1a <- "/path/to/dbNSFP4.1a"
+  # 4. change "/path/to/annovar" on the line below to the local path to the folder containing the annovar libraries
+      path_to_annovar <- "/path/to/annovar"
+  # 5. change "/path/to/cadd" on the line below to the local path to the folder containing the CADD scripts
+      path_to_cadd <- "/path/to/cadd"
+  # 6. change "/path/to/LOEUF" on the line below to the local path to the folder containing the LOEUF table downloaded from gnomAD
+      path_to_LOEUF <- "/path/to/LOEUF"
+  # 7. the 4 .bed files in the GitHub repository should be downloaded and placed in the local home directory
 
 # The output of this step will be a .csv file placed in the home directory
 
-files <- list.files("path_to_files")
+files <- list.files(glue("{path_to_files}"))
 
 # Part 2 Script Structure Overview
 
@@ -25,14 +40,6 @@ files <- list.files("path_to_files")
 # 4. LOEUF (from gnomAD) using offline table
 # 5. Gene_lists (monoIBD, IBD_GWAS, PID, CDG) from local BED files
 # 6. Het or Homozygous from alignment call (in VCF from the beginning)
-
-# Packages
-library(tidyverse)
-library(plyr)
-library(choiceDes) #for saving delim (.in) files
-library(pgirmess) #for saving to delim files
-library(glue) #for interpreting string literals
-library(data.table) #for the foverlaps function used in gene_lists step 7
 
 
 proband_annotation <- function(input) {
@@ -45,7 +52,7 @@ proband_annotation <- function(input) {
     # Load the vcf into R
     vcf <- read_delim(input, 
                       "\t", escape_double = FALSE, trim_ws = TRUE, 
-                      skip = 296, col_types = cols('#CHROM' = col_factor()))
+                      skip = skip, col_types = cols('#CHROM' = col_factor()))
     names(vcf)[names(vcf) == "#CHROM"] <- "Chr"
     
     # Remove the 'chr' from the start of the chromosome column
@@ -65,10 +72,10 @@ proband_annotation <- function(input) {
     dbnsfp_phrase <- as.character(glue("java -jar search_dbNSFP41a.jar -i {patient_id}.in -o {patient_id}.out -v hg38"))
     
     # Running dbNSFP java applet via command line to add dbNSFP annotations
-    system("cd /path/to/dbNSFP4.1a/")
+    system(glue("cd {path_to_dbNSFP4.1a}"))
     system(dbnsfp_phrase)
 
-    dbnsfp_output <- glue("/path/to/dbNSFP4.1a/{patient_id}.out")
+    dbnsfp_output <- glue("{path_to_dbNSFP4.1a}/{patient_id}.out")
     
     # load the dbnsfp result into R and add an end column
     vcf_post_dbnsfp <- read_delim(dbnsfp_output,
@@ -206,7 +213,7 @@ proband_annotation <- function(input) {
     # get down to the desired (useful) columns
     vcf_post_dbnsfp <- subset(vcf_post_dbnsfp, select = desired_columns)
     
-    # creating "address"column as a primary key for each data frame to enable merge
+    # creating "address" column as a primary key for each data frame to enable merge
     vcf$address <- paste0(vcf$chr, ":", vcf$start)
     vcf$address <- paste0(vcf$address, ":", vcf$ref)
     vcf$address <- paste0(vcf$address, ":", vcf$alt)
@@ -238,15 +245,15 @@ proband_annotation <- function(input) {
     
     write.delim(vcf, annovar_save)
     
-    annovar_phrase <- as.character(glue("perl /path/to/annovar/table_annovar.pl ~/{patient_id}.txt -buildver hg38 /path/to/annovar -out {patient_id} -remove -protocol gnomad211_exome,refGene -operation f,g -nastring ."))
+    annovar_phrase <- as.character(glue("perl {path_to_annovar}/table_annovar.pl ~/{patient_id}.txt -buildver hg38 {path_to_annovar} -out {patient_id} -remove -protocol gnomad211_exome,refGene -operation f,g -nastring ."))
     
-    setwd("path/to/annovar")
+    setwd(glue("{path_to_annovar}"))
     
     # Annotation w MAF (gnomAD 2.1.1) and refGene via annovar via terminal command
     system(annovar_phrase)
     
     # load in the results of annovar (will also include dbNSFP annotations)
-    readin_annovar_phrase <- glue("/path/to/annovar/{patient_id}.hg38_multianno.txt")
+    readin_annovar_phrase <- glue("{path_to_annovar}/{patient_id}.hg38_multianno.txt")
     
     post_annovar <- read_delim(readin_annovar_phrase,
                          "\t",
@@ -284,7 +291,7 @@ proband_annotation <- function(input) {
     
   # Step 4. Add CADD annotation ####
   
-    setwd("path/to/cadd")
+    setwd(glue("{path_to_cadd}"))
     
     cadd_save <- as.character(glue("{patient_id}.forcadd.vcf"))
     
@@ -1030,7 +1037,7 @@ proband_annotation <- function(input) {
     
   #Step 6. LOEUF Annotation############################################################
     
-    setwd("path/to/LOEUF")
+    setwd(glue("{path_to_LOEUF}"))
     
     gnomad_constraints <- read_delim("gnomad.v2.1.1.lof_metrics.by_gene.txt", "\t", escape_double = FALSE, trim_ws = TRUE)
     

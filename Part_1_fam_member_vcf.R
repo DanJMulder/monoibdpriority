@@ -2,22 +2,26 @@
 ##  Written by Daniel Mulder, February 2021
 #   Part 1 Family member vcf pipeline
 
-# TO USE THIS SCRIPT, the following user changes are needed:
-  # 1. input the local path to the folder containing the family member VCFs to process (to replace "path/to/files" below)
-    # the folder should contain only the VCF files to be processed
-    # the folder should not contain the proband VCF files which are processed in a separate script
-  # 2. change the "skip" argument in the read_delim() function below depending on how many header rows need to be skipped in the VCF
+
+# To use this script, the following user changes are needed:
+  # 1. change "/path/to/files" on the line below to the local path to the folder containing only the family member VCFs (not proband VCFs)
+      path_to_files <- "path/to/files"
+  # 2. change the "number_of_header_rows" variable on the line below to how many header rows in your VCFs (that need to be skipped)
+      skip <- number_of_header_rows
 
 
 library(tidyverse)
+library(glue) #for interpreting string literals
 
-files <- list.files("path/to/files")
+
+files <- list.files(glue("{path_to_files}"))
+
 
 fam_memb_processing <- function(input) {
   #load in vcf
   vcf <- read_delim(input, 
                     "\t", escape_double = FALSE, trim_ws = TRUE, 
-                    skip = 296, col_types = cols('#CHROM' = col_factor()))
+                    skip = skip, col_types = cols('#CHROM' = col_factor()))
   names(vcf)[names(vcf) == "#CHROM"] <- "chr"
   vcf$chr <- as.factor(gsub('chr', '', vcf$chr))
   
