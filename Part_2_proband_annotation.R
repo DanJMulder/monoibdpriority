@@ -222,8 +222,9 @@ proband_annotation <- function(input, output_dir) {
 
   write.delim(vcf, annovar_save)
 
-  annovar_phrase <- as.character(glue("perl {path_to_annovar}/table_annovar.pl {annovar_save} {path_to_annovar_db}
-  -buildver hg38 -out {annovar_out_prefix} -remove -protocol gnomad211_exome,refGene -operation f,g -nastring ."))
+  annovar_phrase <- as.character(glue("perl {path_to_annovar}/table_annovar.pl {annovar_save} {path_to_annovar_db}",
+                                      "-buildver hg38 -out {annovar_out_prefix} -remove",
+                                      "-protocol gnomad211_exome,refGene -operation f,g -nastring .", .sep = " "))
 
   # Annotation w MAF (gnomAD 2.1.1) and refGene via annovar via terminal command
   system(annovar_phrase)
