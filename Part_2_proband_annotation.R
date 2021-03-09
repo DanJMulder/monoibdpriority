@@ -1288,6 +1288,6 @@ proband_annotation <- function(input, output_dir, header_length) {
 
 #loop through input files
 for (i in seq_along(files)) {
-  skip <- vcf_header_count(files[i])
+  skip <- vcf_header_count(files[i]) - 1
   proband_annotation(files[i], "./", skip)
 }
