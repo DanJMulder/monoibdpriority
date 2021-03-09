@@ -18,15 +18,16 @@ path_to_files <- "path/to/files"
 # 2. change the "number_of_header_rows" variable on the line below to how many header rows in your VCFs (that need to be skipped)
 skip <- number_of_header_rows
 # 3. change "/path/to/dbNSFP4.1a" on the line below to the local path to the folder containing the dbNSFP4.1a java applet
-path_to_dbNSFP4.1a <- "/path/to/dbNSFP4.1a"
+path_to_dbNSFP4.1a <- "/path/to/dbNSFP4.1a/search_dbNSFP41a.jar"
 # 4. change "/path/to/annovar" on the line below to the local path to the folder containing the annovar libraries
 path_to_annovar <- "/path/to/annovar"
+path_to_annovar_db <- "/path/to/annovar/humandb"
 # 5. change "/path/to/cadd" on the line below to the local path to the folder containing the CADD scripts
 path_to_cadd <- "/path/to/cadd"
 # 6. change "/path/to/LOEUF" on the line below to the local path to the folder containing the LOEUF table downloaded from gnomAD
 path_to_LOEUF <- "/path/to/LOEUF"
 # 7. the 4 .bed files in the GitHub repository should be downloaded and placed in the local home directory
-
+path_to_monoibdpriority <- "/path/to/monoibdpriority"
 # The output of this step will be a .csv file placed in the home directory
 
 files <- list.files(glue("{path_to_files}"))
@@ -42,7 +43,7 @@ files <- list.files(glue("{path_to_files}"))
 # 6. Het or Homozygous from alignment call (in VCF from the beginning)
 
 
-proband_annotation <- function(input) {
+proband_annotation <- function(input, output_dir) {
 
   # Step 1. Load in and prepare the VCF file ####
 
@@ -66,16 +67,13 @@ proband_annotation <- function(input) {
   vcf_for_dbnsfp$Chr <- as.factor(vcf_for_dbnsfp$Chr)
 
   # Save smaller vcf dataframe to folder so dbNSFP java applet can use it
-  input_in <- glue("{patient_id}.in")
+  input_in <- glue("{output_dir}/{patient_id}.in")
+  dbnsfp_output <- glue("{path_to_dbNSFP4.1a}/{patient_id}.out")
   write.tab(vcf_for_dbnsfp, input_in)
 
-  dbnsfp_phrase <- as.character(glue("java -jar search_dbNSFP41a.jar -i {patient_id}.in -o {patient_id}.out -v hg38"))
-
   # Running dbNSFP java applet via command line to add dbNSFP annotations
-  system(glue("cd {path_to_dbNSFP4.1a}"))
+  dbnsfp_phrase <- as.character(glue("java -jar {path_to_dbNSFP4.1a} -i {input_in} -o {dbnsfp_output}.out -v hg38"))
   system(dbnsfp_phrase)
-
-  dbnsfp_output <- glue("{path_to_dbNSFP4.1a}/{patient_id}.out")
 
   # load the dbnsfp result into R and add an end column
   vcf_post_dbnsfp <- read_delim(dbnsfp_output,
@@ -85,7 +83,8 @@ proband_annotation <- function(input) {
                                 trim_ws = TRUE,
                                 na = ".",
                                 guess_max = 200000,
-                                col_types = cols('#chr' = col_factor(), 'hg19_chr' = col_factor(), 'hg18_chr' = col_factor()))
+                                col_types = cols('#chr' = col_factor(), 'hg19_chr' = col_factor(),
+                                                 'hg18_chr' = col_factor()))
 
   # reorder the columns to match the original vcf order (to prevent confusion b/c lots of chr/start columns in dbnsf output for different ref genomes)
   vcf_post_dbnsfp <- vcf_post_dbnsfp[, c(1:7, 12:463)]
@@ -187,29 +186,6 @@ proband_annotation <- function(input) {
                        "bStatistic_converted_rankscore"
   )
 
-  # make a list of the columns that output predictions (eg damaging vs tolerated, instead of a numeric score)
-  prediction_columns <- c("SIFT_pred",
-                          "SIFT4G_pred",
-                          "Polyphen2_HDIV_pred",
-                          "Polyphen2_HVAR_pred",
-                          "LRT_pred",
-                          "MutationTaster_pred",
-                          "MutationAssessor_pred",
-                          "FATHMM_pred",
-                          "PROVEAN_pred",
-                          "MetaSVM_pred",
-                          "MetaLR_pred",
-                          "M_CAP_pred",
-                          "PrimateAI_pred",
-                          "DEOGEN2_pred",
-                          "BayesDel_addAF_pred",
-                          "BayesDel_noAF_pred",
-                          "ClinPred_pred",
-                          "LIST_S2_pred",
-                          "Aloft_pred",
-                          "fathmm_MKL_coding_pred",
-                          "fathmm_XF_coding_pred")
-
   # get down to the desired (useful) columns
   vcf_post_dbnsfp <- subset(vcf_post_dbnsfp, select = desired_columns)
 
@@ -241,19 +217,19 @@ proband_annotation <- function(input) {
   vcf$end <- vcf$start + vcf$variant_length
   vcf <- vcf[, c(1, 2, 77, 3:75)]
 
-  annovar_save <- as.character(glue("~/{patient_id}.txt"))
+  annovar_save <- as.character(glue("{output_dir}/{patient_id}.txt"))
+  annovar_out_prefix <- glue("{output_dir}/{patient_id}")
 
   write.delim(vcf, annovar_save)
 
-  annovar_phrase <- as.character(glue("perl {path_to_annovar}/table_annovar.pl ~/{patient_id}.txt -buildver hg38 {path_to_annovar} -out {patient_id} -remove -protocol gnomad211_exome,refGene -operation f,g -nastring ."))
-
-  setwd(glue("{path_to_annovar}"))
+  annovar_phrase <- as.character(glue("perl {path_to_annovar}/table_annovar.pl {annovar_save} {path_to_annovar_db}
+  -buildver hg38 -out {annovar_out_prefix} -remove -protocol gnomad211_exome,refGene -operation f,g -nastring ."))
 
   # Annotation w MAF (gnomAD 2.1.1) and refGene via annovar via terminal command
   system(annovar_phrase)
 
   # load in the results of annovar (will also include dbNSFP annotations)
-  readin_annovar_phrase <- glue("{path_to_annovar}/{patient_id}.hg38_multianno.txt")
+  readin_annovar_phrase <- glue("{annovar_out_prefix}.hg38_multianno.txt")
 
   post_annovar <- read_delim(readin_annovar_phrase,
                              "\t",
@@ -291,18 +267,17 @@ proband_annotation <- function(input) {
 
   # Step 4. Add CADD annotation ####
 
-  setwd(glue("{path_to_cadd}"))
-
-  cadd_save <- as.character(glue("{patient_id}.forcadd.vcf"))
+  cadd_save <- as.character(glue("{output_dir}/{patient_id}.forcadd.vcf"))
+  cadd_output <- as.character(glue("{output_dir}/{patient_id}.forcadd.tsv.gz"))
 
   write_delim(vcf, cadd_save)
 
-  cadd_phrase <- as.character(glue("./CADD.sh {patient_id}.forcadd.vcf"))
+  cadd_phrase <- as.character(glue("{path_to_cadd}/CADD.sh {cadd_save}"))
 
   # terminal command to run offline local cadd command line program
   system(cadd_phrase)
 
-  read_delim(cadd_save, "\t", guess_max = 200000, escape_double = FALSE, trim_ws = TRUE, skip = 1,)
+  cadd_score <- read_delim(cadd_output, "\t", guess_max = 200000, escape_double = FALSE, trim_ws = TRUE, skip = 1,)
 
   # clean up the annotations
   names(cadd_score)[names(cadd_score) == "#CHROM"] <- "CHROM"
@@ -1056,9 +1031,8 @@ proband_annotation <- function(input) {
 
   #Step 6. LOEUF Annotation############################################################
 
-  setwd(glue("{path_to_LOEUF}"))
-
-  gnomad_constraints <- read_delim("gnomad.v2.1.1.lof_metrics.by_gene.txt", "\t", escape_double = FALSE, trim_ws = TRUE)
+  gnomad_constraints <- read_delim("{path_to_LOEUF}/gnomad.v2.1.1.lof_metrics.by_gene.txt", "\t", escape_double =
+    FALSE, trim_ws = TRUE)
 
   gnomad_LOEUF <- subset(gnomad_constraints, select = c(gene, oe_lof_upper))
 
@@ -1072,7 +1046,7 @@ proband_annotation <- function(input) {
 
   #A. monogenic ibd 99 genelist annotation as 'monoibd99'
   vcf$chrom <- as.factor(vcf$chr)
-  monoibd99_bed <- read.csv("monoibd99.bed")
+  monoibd99_bed <- read.csv(glue("{path_to_monoibdpriority}/monoibd99.bed"))
 
   #remove the 'chr' from the start of the chromosome column
   monoibd99_bed$chrom <- gsub('chr', '', monoibd99_bed$chrom)
@@ -1126,7 +1100,7 @@ proband_annotation <- function(input) {
 
   #B. IBD GWAS genelist annotation as 'GWAS440' - see section A for detailed comments on this process
   vcf$chrom <- as.factor(vcf$chr)
-  GWAS440_bed <- read.csv("ibdgwas440.bed")
+  GWAS440_bed <- read.csv(glue("{path_to_monoibdpriority}/ibdgwas440.bed"))
 
   GWAS440_bed$chrom <- gsub('chr', '', GWAS440_bed$chrom)
   names(GWAS440_bed)[names(GWAS440_bed) == "chrom"] <- "chr"
@@ -1208,7 +1182,7 @@ proband_annotation <- function(input) {
 
   #D. cdg468 genelist annotation as 'cdg468 - see section A for detailed comments on this process
   vcf$chrom <- as.factor(vcf$chr)
-  cdg468_bed <- read.csv("~/Documents/Genomics/cdg468.bed")
+  cdg468_bed <- read.csv(glue("{path_to_monoibdpriority}/cdg468.bed"))
 
   cdg468_bed$chrom <- gsub('chr', '', cdg468_bed$chrom)
   names(cdg468_bed)[names(cdg468_bed) == "chrom"] <- "chr"
@@ -1290,15 +1264,13 @@ proband_annotation <- function(input) {
   )
 
   #save the annotated VCF, ready for Part 3 (filtering)
-  annotation_output_phrase <- as.character(glue("~/{patient_id}_annotated.csv"))
+  annotation_output_phrase <- as.character(glue("{output_dir}/{patient_id}_annotated.csv"))
 
   write_csv(vcf, annotation_output_phrase)
 
 }
 
 #loop through input files
-for (i in 1:length(files)) {
-  proband_annotation(files[i])
+for (i in seq_along(files)) {
+  proband_annotation(files[i], "./")
 }
-
-
