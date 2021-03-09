@@ -43,7 +43,7 @@ files <- list.files(glue("{path_to_files}"))
 # 6. Het or Homozygous from alignment call (in VCF from the beginning)
 
 
-proband_annotation <- function(input, output_dir) {
+proband_annotation <- function(input, output_dir, header_length) {
 
   # Step 1. Load in and prepare the VCF file ####
 
@@ -53,7 +53,7 @@ proband_annotation <- function(input, output_dir) {
   # Load the vcf into R
   vcf <- read_delim(input,
                     "\t", escape_double = FALSE, trim_ws = TRUE,
-                    skip = skip, col_types = cols('#CHROM' = col_factor()))
+                    skip = header_length, col_types = cols('#CHROM' = col_factor()))
   names(vcf)[names(vcf) == "#CHROM"] <- "Chr"
 
   # Remove the 'chr' from the start of the chromosome column
@@ -1273,5 +1273,5 @@ proband_annotation <- function(input, output_dir) {
 
 #loop through input files
 for (i in seq_along(files)) {
-  proband_annotation(files[i], "./")
+  proband_annotation(files[i], "./", skip)
 }
