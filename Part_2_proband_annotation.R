@@ -15,22 +15,39 @@ library(data.table) #for the foverlaps function used in gene_lists step 7
 # To use this script, the following user changes are needed (beyond the dependencies listed in the readme file):
 # 1. change "/path/to/files" on the line below to the local path to the folder containing only the proband VCFs
 path_to_files <- "path/to/files"
-# 2. change the "number_of_header_rows" variable on the line below to how many header rows in your VCFs (that need to be skipped)
-skip <- number_of_header_rows
-# 3. change "/path/to/dbNSFP4.1a" on the line below to the local path to the folder containing the dbNSFP4.1a java applet
+# 2. change "/path/to/dbNSFP4.1a" on the line below to the local path to the folder containing the dbNSFP4.1a java
+# applet
 path_to_dbNSFP4.1a <- "/path/to/dbNSFP4.1a/search_dbNSFP41a.jar"
-# 4. change "/path/to/annovar" on the line below to the local path to the folder containing the annovar libraries
+# 3. change "/path/to/annovar" on the line below to the local path to the folder containing the annovar libraries
 path_to_annovar <- "/path/to/annovar"
 path_to_annovar_db <- "/path/to/annovar/humandb"
-# 5. change "/path/to/cadd" on the line below to the local path to the folder containing the CADD scripts
+# 4. change "/path/to/cadd" on the line below to the local path to the folder containing the CADD scripts
 path_to_cadd <- "/path/to/cadd"
-# 6. change "/path/to/LOEUF" on the line below to the local path to the folder containing the LOEUF table downloaded from gnomAD
+# 5. change "/path/to/LOEUF" on the line below to the local path to the folder containing the LOEUF table downloaded
+# from gnomAD
 path_to_LOEUF <- "/path/to/LOEUF"
-# 7. the 4 .bed files in the GitHub repository should be downloaded and placed in the local home directory
+# 6. the 4 .bed files in the GitHub repository should be downloaded and placed in the local home directory
 path_to_monoibdpriority <- "/path/to/monoibdpriority"
 # The output of this step will be a .csv file placed in the home directory
 
 files <- list.files(glue("{path_to_files}"))
+
+vcf_header_count <- function(in_file) {
+  # Returns the number of lines that the header section contains
+  # This function reads in data line-by-line, so it should remain fast and lightweight in most cases
+  # Assumption: The given file is non-empty
+  file_handle <- file(in_file, "r")
+  header_size <- 0
+  while (TRUE) {
+    line <- readLines(file_handle, n = 1)
+    if (grepl("^#", line)) {
+      header_size <- header_size + 1
+    } else {
+      break
+    }
+  }
+  return(header_size)
+}
 
 # Part 2 Script Structure Overview
 
@@ -1273,5 +1290,6 @@ proband_annotation <- function(input, output_dir, header_length) {
 
 #loop through input files
 for (i in seq_along(files)) {
+  skip <- vcf_header_count(files[i])
   proband_annotation(files[i], "./", skip)
 }

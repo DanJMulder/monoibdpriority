@@ -6,14 +6,29 @@
 # To use this script, the following user changes are needed:
 # 1. change "/path/to/files" on the line below to the local path to the folder containing only the family member VCFs (not proband VCFs)
 input_vcf_dir <- "path/to/files"
-# 2. change the "number_of_header_rows" variable on the line below to how many header rows in your VCFs (that need to be skipped)
-skip <- number_of_header_rows
 
 
 library(tidyverse)
 library(glue) #for interpreting string literals
 
 files <- list.files(glue("{input_vcf_dir}"))
+
+vcf_header_count <- function(in_file) {
+  # Returns the number of lines that the header section contains
+  # This function reads in data line-by-line, so it should remain fast and lightweight in most cases
+  # Assumption: The given file is non-empty
+  file_handle <- file(in_file, "r")
+  header_size <- 0
+  while (TRUE) {
+    line <- readLines(file_handle, n = 1)
+    if (grepl("^#", line)) {
+      header_size <- header_size + 1
+    } else {
+      break
+    }
+  }
+  return(header_size)
+}
 
 fam_memb_processing <- function(input, output, num_header) {
   #load in vcf
@@ -50,5 +65,6 @@ fam_memb_processing <- function(input, output, num_header) {
 
 #loop through input files
 for (i in seq_along(files)) {
+  skip <- vcf_header_count(files[i]) - 1
   fam_memb_processing(files[i], files[i], skip)
 }
