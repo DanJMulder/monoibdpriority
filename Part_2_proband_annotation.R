@@ -15,17 +15,15 @@ library(data.table) #for the foverlaps function used in gene_lists step 7
 # To use this script, the following user changes are needed (beyond the dependencies listed in the readme file):
 # 1. change "/path/to/files" on the line below to the local path to the folder containing only the proband VCFs
 path_to_files <- "path/to/files"
-# 2. change "/path/to/dbNSFP4.1a" on the line below to the local path to the folder containing the dbNSFP4.1a java
-# applet
+# 2. change "/path/to/dbNSFP4.1a" on the line below to the local path to the dbNSFP4.1a java applet
 path_to_dbNSFP4.1a <- "/path/to/dbNSFP4.1a/search_dbNSFP41a.jar"
-# 3. change "/path/to/annovar" on the line below to the local path to the folder containing the annovar libraries
+# 3. change "/path/to/annovar" on the line below to the local path to the folder containing the annovar libraries and db
 path_to_annovar <- "/path/to/annovar"
 path_to_annovar_db <- "/path/to/annovar/humandb"
 # 4. change "/path/to/cadd" on the line below to the local path to the folder containing the CADD scripts
 path_to_cadd <- "/path/to/cadd"
-# 5. change "/path/to/LOEUF" on the line below to the local path to the folder containing the LOEUF table downloaded
-# from gnomAD
-path_to_LOEUF <- "/path/to/LOEUF"
+# 5. change "/path/to/LOEUF" on the line below to the local path to the LOEUF table downloaded from gnomAD
+path_to_LOEUF_table <- "/path/to/LOEUF/gnomad.v2.1.1.lof_metrics.by_gene.txt"
 # 6. the 4 .bed files in the GitHub repository should be downloaded and placed in the local home directory
 path_to_monoibdpriority <- "/path/to/monoibdpriority"
 # The output of this step will be a .csv file placed in the home directory
@@ -1049,7 +1047,7 @@ proband_annotation <- function(input, output_dir, header_length) {
 
   #Step 6. LOEUF Annotation############################################################
 
-  gnomad_constraints <- read_delim("{path_to_LOEUF}/gnomad.v2.1.1.lof_metrics.by_gene.txt", "\t", escape_double =
+  gnomad_constraints <- read_delim("{path_to_LOEUF}", "\t", escape_double =
     FALSE, trim_ws = TRUE)
 
   gnomad_LOEUF <- subset(gnomad_constraints, select = c(gene, oe_lof_upper))
