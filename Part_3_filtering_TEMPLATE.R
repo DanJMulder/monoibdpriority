@@ -111,9 +111,6 @@ vcf <- select(vcf,
               AAChange.refGene,
               everything(),
               -address,
-              -recessive_inheritance,
-              -dominant_inheritance,
-              -XL_inheritance
 )
 
 # save unfiltered vcf
