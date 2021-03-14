@@ -110,7 +110,7 @@ vcf <- select(vcf,
               GeneDetail.refGene,
               AAChange.refGene,
               everything(),
-              -address,
+              -address
 )
 
 # save unfiltered vcf
