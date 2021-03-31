@@ -6,29 +6,30 @@
 # Packages
 library(plyr)
 library(tidyverse)
-library(choiceDes) #for saving delim (.in) files
-library(pgirmess) #for saving to delim files
-library(glue) #for interpreting string literals
+#library(choiceDes) #for saving delim (.in) files
+#library(pgirmess) #for saving to delim files
+#library(glue) #for interpreting string literals
 library(data.table) #for the foverlaps function used in gene_lists step 7
 
 
 # To use this script, the following user changes are needed (beyond the dependencies listed in the readme file):
 # 1. change "/path/to/files" on the line below to the local path to the folder containing only the proband VCFs
-path_to_files <- "path/to/files"
+path_to_files <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/data/proband"
 # 2. change "/path/to/dbNSFP4.1a" on the line below to the local path to the dbNSFP4.1a java applet
-path_to_dbNSFP4.1a <- "/path/to/dbNSFP4.1a/search_dbNSFP41a.jar"
+path_to_dbNSFP4.1a <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/dbNSFP4.1a/search_dbNSFP41a.jar"
 # 3. change "/path/to/annovar" on the line below to the local path to the folder containing the annovar libraries and db
-path_to_annovar <- "/path/to/annovar"
-path_to_annovar_db <- "/path/to/annovar/humandb"
+path_to_annovar <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/annovar"
+path_to_annovar_db <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/annovar/humandb"
 # 4. change "/path/to/cadd" on the line below to the local path to the folder containing the CADD scripts
-path_to_cadd <- "/path/to/cadd"
+path_to_cadd <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/CADD-scripts-CADD1.6"
 # 5. change "/path/to/LOEUF" on the line below to the local path to the LOEUF table downloaded from gnomAD
-path_to_LOEUF_table <- "/path/to/LOEUF/gnomad.v2.1.1.lof_metrics.by_gene.txt"
+path_to_LOEUF_table <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/gnomad.v2.1.1.lof_metrics.by_gene.txt"
 # 6. the 4 .bed files in the GitHub repository should be downloaded and placed in the local home directory
-path_to_monoibdpriority <- "/path/to/monoibdpriority"
+path_to_monoibdpriority <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/monoibdpriority"
 # The output of this step will be a .csv file placed in the home directory
 
-files <- list.files(glue("{path_to_files}"))
+
+files <- list.files(path_to_files)
 
 vcf_header_count <- function(in_file) {
   # Returns the number of lines that the header section contains
@@ -44,6 +45,7 @@ vcf_header_count <- function(in_file) {
       break
     }
   }
+  close(file_handle)
   return(header_size)
 }
 
@@ -63,11 +65,11 @@ proband_annotation <- function(input, output_dir, header_length) {
   # Step 1. Load in and prepare the VCF file ####
 
   # Create a string variable w just the input file name (as the patient ID)
-  patient_id <- gsub('.vcf', '', input)
+  patient_id <- gsub('.vcf', '', basename(input))
+  output_dir <- normalizePath(output_dir)
 
   # Load the vcf into R
-  vcf <- read_delim(input,
-                    "\t", escape_double = FALSE, trim_ws = TRUE,
+  vcf <- read_delim(input, "\t", escape_double = FALSE, trim_ws = TRUE,
                     skip = header_length, col_types = cols('#CHROM' = col_factor()))
   names(vcf)[names(vcf) == "#CHROM"] <- "Chr"
 
@@ -82,12 +84,16 @@ proband_annotation <- function(input, output_dir, header_length) {
   vcf_for_dbnsfp$Chr <- as.factor(vcf_for_dbnsfp$Chr)
 
   # Save smaller vcf dataframe to folder so dbNSFP java applet can use it
-  input_in <- glue("{output_dir}/{patient_id}.in")
-  dbnsfp_output <- glue("{path_to_dbNSFP4.1a}/{patient_id}.out")
-  write.tab(vcf_for_dbnsfp, input_in)
+  input_in <- file.path(output_dir, paste0(patient_id, ".in"))
+  dbnsfp_output <- file.path(output_dir, paste0(patient_id, ".out"))
+  write_tsv(vcf_for_dbnsfp, input_in, na = ".", quote = FALSE)
+  rm(vcf_for_dbnsfp)
 
   # Running dbNSFP java applet via command line to add dbNSFP annotations
-  dbnsfp_phrase <- as.character(glue("java -jar {path_to_dbNSFP4.1a} -i {input_in} -o {dbnsfp_output}.out -v hg38"))
+  # Note, changing the directory here does not affect R's current working directory.
+  # We need to use a slightly different command in order to run without any GUIs
+  dbnsfp_phrase <- as.character(paste("module load java; cd", dirname(path_to_dbNSFP4.1a),
+                                      "; java search_dbNSFP41a -i", input_in, "-o", dbnsfp_output, "-v hg38"))
   system(dbnsfp_phrase)
 
   # load the dbnsfp result into R and add an end column
@@ -107,7 +113,7 @@ proband_annotation <- function(input, output_dir, header_length) {
   # rename/clean up the "vcf" columns so they will match the "vcf_post_dbnsfp" columns
   names(vcf)[names(vcf) == "Chr"] <- "chr"
   names(vcf)[names(vcf) == "POS"] <- "start"
-  vcf <- subset(vcf, select = -c(ID))
+  vcf <- select(vcf, !ID)
   names(vcf)[names(vcf) == "REF"] <- "ref"
   names(vcf)[names(vcf) == "ALT"] <- "alt"
   names(vcf)[9] <- "genotype"
@@ -232,22 +238,21 @@ proband_annotation <- function(input, output_dir, header_length) {
   vcf$end <- vcf$start + vcf$variant_length
   vcf <- vcf[, c(1, 2, 77, 3:75)]
 
-  annovar_save <- as.character(glue("{output_dir}/{patient_id}.txt"))
-  annovar_out_prefix <- glue("{output_dir}/{patient_id}")
+  annovar_save <- file.path(output_dir, paste0(patient_id, ".txt"))
+  annovar_out_prefix <- file.path(output_dir, patient_id)
 
-  write.delim(vcf, annovar_save)
+  write_delim(vcf, annovar_save, delim = "\t", na = ".", col_names = TRUE, quote_escape = FALSE)
 
-  annovar_phrase <- as.character(glue("perl {path_to_annovar}/table_annovar.pl {annovar_save} {path_to_annovar_db}",
-                                      "-buildver hg38 -out {annovar_out_prefix} -remove",
-                                      "-protocol gnomad211_exome,refGene -operation f,g -nastring .", .sep = " "))
+  annovar_script <- file.path(path_to_annovar, "table_annovar.pl")
+  annovar_phrase <- as.character(paste("perl", annovar_script, annovar_save, path_to_annovar_db,
+                                       "-buildver hg38 -out", annovar_out_prefix, "-remove",
+                                       "-protocol gnomad211_exome,refGene -operation f,g -nastring ."))
 
   # Annotation w MAF (gnomAD 2.1.1) and refGene via annovar via terminal command
   system(annovar_phrase)
 
   # load in the results of annovar (will also include dbNSFP annotations)
-  readin_annovar_phrase <- glue("{annovar_out_prefix}.hg38_multianno.txt")
-
-  post_annovar <- read_delim(readin_annovar_phrase,
+  post_annovar <- read_delim(paste0(annovar_out_prefix, ".hg38_multianno.txt"),
                              "\t",
                              escape_double = FALSE,
                              trim_ws = TRUE,
@@ -272,37 +277,42 @@ proband_annotation <- function(input, output_dir, header_length) {
   vcf <- merge(vcf, post_annovar, by = "address", all.x = TRUE)
 
   # clean up the column names and remove redundant columns
-  names(vcf)[names(vcf) == "chr.x"] <- "chr"
+  names(vcf)[names(vcf) == "chr.x"] <- "#CHROM"  # CADD requires the capitalization and the hash sign.
   names(vcf)[names(vcf) == "start.x"] <- "start"
   names(vcf)[names(vcf) == "end.x"] <- "end"
   names(vcf)[names(vcf) == "ref.x"] <- "ref"
   names(vcf)[names(vcf) == "alt.x"] <- "alt"
-  vcf <- subset(vcf, select = -c(chr.y, start.y, end.y, ref.y, alt.y))
+  vcf <- subset(vcf, select = -c(chr.y, start.y, end.y, ref.y, alt.y, address))
 
   rm(post_annovar)
 
   # Step 4. Add CADD annotation ####
 
-  cadd_save <- as.character(glue("{output_dir}/{patient_id}.forcadd.vcf"))
-  cadd_output <- as.character(glue("{output_dir}/{patient_id}.forcadd.tsv.gz"))
+  cadd_save <- file.path(output_dir, paste0(patient_id, ".forcadd.vcf"))
+  cadd_output <- file.path(output_dir, paste0(patient_id, ".forcadd.tsv.gz"))
 
-  write_delim(vcf, cadd_save)
+  write_delim(vcf, cadd_save, delim = "\t", na = ".", col_names = TRUE, quote_escape = FALSE)
 
-  cadd_phrase <- as.character(glue("{path_to_cadd}/CADD.sh {cadd_save}"))
+  cadd_phrase <- paste(file.path(path_to_cadd, "CADD.sh"), "-c", num.cpu, cadd_save)
 
   # terminal command to run offline local cadd command line program
   system(cadd_phrase)
 
+  # creating "address" column as a primary key for each data frame to enable merge
+  vcf$address <- paste0(vcf[, "#CHROM"], ":", vcf$start)
+  vcf$address <- paste0(vcf$address, ":", vcf$ref)
+  vcf$address <- paste0(vcf$address, ":", vcf$alt)
+
   cadd_score <- read_delim(cadd_output, "\t", guess_max = 200000, escape_double = FALSE, trim_ws = TRUE, skip = 1,)
 
   # clean up the annotations
-  names(cadd_score)[names(cadd_score) == "#CHROM"] <- "CHROM"
+  names(cadd_score)[names(cadd_score) == "#Chrom"] <- "CHROM"  # CADD outputs header slightly differently
   names(cadd_score)[names(cadd_score) == "PHRED"] <- "CADD16_PHRED"
 
   # create a primary key for cadd data frame to enable merge
-  cadd_score$address <- paste0(cadd_score$CHROM, ":", cadd_score$POS)
-  cadd_score$address <- paste0(cadd_score$adddress, ":", cadd_score$REF)
-  cadd_score$address <- paste0(cadd_score$address, ":", cadd_score$ALT)
+  cadd_score$address <- paste0(cadd_score$CHROM, ":", cadd_score$Pos)
+  cadd_score$address <- paste0(cadd_score$address, ":", cadd_score$Ref)
+  cadd_score$address <- paste0(cadd_score$address, ":", cadd_score$Alt)
 
   vcf$AF <- as.character(vcf$AF)
 
@@ -331,11 +341,6 @@ proband_annotation <- function(input, output_dir, header_length) {
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$SIFT_pred_proportion <- (vcf$SIFT_pred_Dcount / (vcf$SIFT_pred_Dcount + vcf$SIFT_pred_Tcount))
 
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
-
   vcf$SIFT_pred_proportion[is.nan(vcf$SIFT_pred_proportion)] <- 0
 
   #function to count as TRUE if D/D+T > 0.5 or FALSE if (D/D+T <=0.5 | blank (if any blanks still remain))
@@ -361,11 +366,6 @@ proband_annotation <- function(input, output_dir, header_length) {
 
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$SIFT4G_pred_proportion <- (vcf$SIFT4G_pred_Dcount / (vcf$SIFT4G_pred_Dcount + vcf$SIFT4G_pred_Tcount))
-
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
 
   vcf$SIFT4G_pred_proportion[is.nan(vcf$SIFT4G_pred_proportion)] <- 0
 
@@ -401,11 +401,6 @@ proband_annotation <- function(input, output_dir, header_length) {
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$Polyphen2_HDIV_pred_proportion <- (vcf$Polyphen2_HDIV_pred_PandDcount / (vcf$Polyphen2_HDIV_pred_PandDcount + vcf$Polyphen2_HDIV_pred_Bcount))
 
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
-
   vcf$Polyphen2_HDIV_pred_proportion[is.nan(vcf$Polyphen2_HDIV_pred_proportion)] <- 0
 
   #function to count as TRUE if D/D+T > 0.5 or FALSE if (D/D+T <=0.5 | blank (if any blanks still remain))
@@ -439,11 +434,6 @@ proband_annotation <- function(input, output_dir, header_length) {
 
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$Polyphen2_HVAR_pred_proportion <- (vcf$Polyphen2_HVAR_pred_PandDcount / (vcf$Polyphen2_HVAR_pred_PandDcount + vcf$Polyphen2_HVAR_pred_Bcount))
-
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
 
   vcf$Polyphen2_HVAR_pred_proportion[is.nan(vcf$Polyphen2_HVAR_pred_proportion)] <- 0
 
@@ -502,11 +492,6 @@ proband_annotation <- function(input, output_dir, header_length) {
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$MutationTaster_pred_proportion <- (vcf$MutationTaster_pred_DandAcount / (vcf$MutationTaster_pred_DandAcount + vcf$MutationTaster_pred_PandNcount))
 
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
-
   vcf$MutationTaster_pred_proportion[is.nan(vcf$MutationTaster_pred_proportion)] <- 0
 
   #function to count as TRUE if D/D+T > 0.5 or FALSE if (D/D+T <=0.5 | blank (if any blanks still remain))
@@ -543,11 +528,6 @@ proband_annotation <- function(input, output_dir, header_length) {
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$MutationAssessor_pred_proportion <- (vcf$MutationAssessor_pred_MandHcount / (vcf$MutationAssessor_pred_MandHcount + vcf$MutationAssessor_pred_LandNcount))
 
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
-
   vcf$MutationAssessor_pred_proportion[is.nan(vcf$MutationAssessor_pred_proportion)] <- 0
 
   #function to count as TRUE if D/D+T > 0.5 or FALSE if (D/D+T <=0.5 | blank (if any blanks still remain))
@@ -573,11 +553,6 @@ proband_annotation <- function(input, output_dir, header_length) {
 
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$FATHMM_pred_proportion <- (vcf$FATHMM_pred_Dcount / (vcf$FATHMM_pred_Dcount + vcf$FATHMM_pred_Tcount))
-
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
 
   vcf$FATHMM_pred_proportion[is.nan(vcf$FATHMM_pred_proportion)] <- 0
 
@@ -605,11 +580,6 @@ proband_annotation <- function(input, output_dir, header_length) {
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$PROVEAN_pred_proportion <- (vcf$PROVEAN_pred_Dcount / (vcf$PROVEAN_pred_Dcount + vcf$PROVEAN_pred_Ncount))
 
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
-
   vcf$PROVEAN_pred_proportion[is.nan(vcf$PROVEAN_pred_proportion)] <- 0
 
   #function to count as TRUE if D/D+T > 0.5 or FALSE if (D/D+T <=0.5 | blank (if any blanks still remain))
@@ -635,11 +605,6 @@ proband_annotation <- function(input, output_dir, header_length) {
 
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$MetaSVM_pred_proportion <- (vcf$MetaSVM_pred_Dcount / (vcf$MetaSVM_pred_Dcount + vcf$MetaSVM_pred_Tcount))
-
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
 
   vcf$MetaSVM_pred_proportion[is.nan(vcf$MetaSVM_pred_proportion)] <- 0
 
@@ -667,11 +632,6 @@ proband_annotation <- function(input, output_dir, header_length) {
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$MetaLR_pred_proportion <- (vcf$MetaLR_pred_Dcount / (vcf$MetaLR_pred_Dcount + vcf$MetaLR_pred_Tcount))
 
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
-
   vcf$MetaLR_pred_proportion[is.nan(vcf$MetaLR_pred_proportion)] <- 0
 
   #function to count as TRUE if D/D+T > 0.5 or FALSE if (D/D+T <=0.5 | blank (if any blanks still remain))
@@ -697,11 +657,6 @@ proband_annotation <- function(input, output_dir, header_length) {
 
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$M_CAP_pred_proportion <- (vcf$M_CAP_pred_Dcount / (vcf$M_CAP_pred_Dcount + vcf$M_CAP_pred_Tcount))
-
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
 
   vcf$M_CAP_pred_proportion[is.nan(vcf$M_CAP_pred_proportion)] <- 0
 
@@ -729,11 +684,6 @@ proband_annotation <- function(input, output_dir, header_length) {
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$PrimateAI_pred_proportion <- (vcf$PrimateAI_pred_Dcount / (vcf$PrimateAI_pred_Dcount + vcf$PrimateAI_pred_Tcount))
 
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
-
   vcf$PrimateAI_pred_proportion[is.nan(vcf$PrimateAI_pred_proportion)] <- 0
 
   #function to count as TRUE if D/D+T > 0.5 or FALSE if (D/D+T <=0.5 | blank (if any blanks still remain))
@@ -759,11 +709,6 @@ proband_annotation <- function(input, output_dir, header_length) {
 
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$DEOGEN2_pred_proportion <- (vcf$DEOGEN2_pred_Dcount / (vcf$DEOGEN2_pred_Dcount + vcf$DEOGEN2_pred_Tcount))
-
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
 
   vcf$DEOGEN2_pred_proportion[is.nan(vcf$DEOGEN2_pred_proportion)] <- 0
 
@@ -792,11 +737,6 @@ proband_annotation <- function(input, output_dir, header_length) {
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$BayesDel_addAF_pred_proportion <- (vcf$BayesDel_addAF_pred_Dcount / (vcf$BayesDel_addAF_pred_Dcount + vcf$BayesDel_addAF_pred_Tcount))
 
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
-
   vcf$BayesDel_addAF_pred_proportion[is.nan(vcf$BayesDel_addAF_pred_proportion)] <- 0
 
   #function to count as TRUE if D/D+T > 0.5 or FALSE if (D/D+T <=0.5 | blank (if any blanks still remain))
@@ -824,11 +764,6 @@ proband_annotation <- function(input, output_dir, header_length) {
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$BayesDel_noAF_pred_proportion <- (vcf$BayesDel_noAF_pred_Dcount / (vcf$BayesDel_noAF_pred_Dcount + vcf$BayesDel_noAF_pred_Tcount))
 
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
-
   vcf$BayesDel_noAF_pred_proportion[is.nan(vcf$BayesDel_noAF_pred_proportion)] <- 0
 
   #function to count as TRUE if D/D+T > 0.5 or FALSE if (D/D+T <=0.5 | blank (if any blanks still remain))
@@ -855,11 +790,6 @@ proband_annotation <- function(input, output_dir, header_length) {
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$ClinPred_pred_proportion <- (vcf$ClinPred_pred_Dcount / (vcf$ClinPred_pred_Dcount + vcf$ClinPred_pred_Tcount))
 
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
-
   vcf$ClinPred_pred_proportion[is.nan(vcf$ClinPred_pred_proportion)] <- 0
 
   #function to count as TRUE if D/D+T > 0.5 or FALSE if (D/D+T <=0.5 | blank (if any blanks still remain))
@@ -885,11 +815,6 @@ proband_annotation <- function(input, output_dir, header_length) {
 
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$LIST_S2_pred_proportion <- (vcf$LIST_S2_pred_Dcount / (vcf$LIST_S2_pred_Dcount + vcf$LIST_S2_pred_Tcount))
-
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
 
   vcf$LIST_S2_pred_proportion[is.nan(vcf$LIST_S2_pred_proportion)] <- 0
 
@@ -926,11 +851,6 @@ proband_annotation <- function(input, output_dir, header_length) {
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$Aloft_pred_proportion <- (vcf$Aloft_pred_RandDcount / (vcf$Aloft_pred_RandDcount + vcf$Aloft_pred_Tcount))
 
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
-
   vcf$Aloft_pred_proportion[is.nan(vcf$Aloft_pred_proportion)] <- 0
 
   #function to count as TRUE if D/D+T > 0.5 or FALSE if (D/D+T <=0.5 | blank (if any blanks still remain))
@@ -957,11 +877,6 @@ proband_annotation <- function(input, output_dir, header_length) {
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$fathmm_MKL_coding_pred_proportion <- (vcf$fathmm_MKL_coding_pred_Dcount / (vcf$fathmm_MKL_coding_pred_Dcount + vcf$fathmm_MKL_coding_pred_Tcount))
 
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
-
   vcf$fathmm_MKL_coding_pred_proportion[is.nan(vcf$fathmm_MKL_coding_pred_proportion)] <- 0
 
   #function to count as TRUE if D/D+T > 0.5 or FALSE if (D/D+T <=0.5 | blank (if any blanks still remain))
@@ -987,11 +902,6 @@ proband_annotation <- function(input, output_dir, header_length) {
 
   #Proportions of D out of total (D+T) so can get a simple binary output in the next step
   vcf$fathmm_XF_coding_pred_proportion <- (vcf$fathmm_XF_coding_pred_Dcount / (vcf$fathmm_XF_coding_pred_Dcount + vcf$fathmm_XF_coding_pred_Tcount))
-
-  #turn NaN into 0 so it is counted as FALSE in final column (as in not predicted to be damating)
-  #this requires building a function for is.nan (from stackoverflow) to work in a dataframe
-  is.nan.data.frame <- function(x)
-    do.call(cbind, lapply(x, is.nan))
 
   vcf$fathmm_XF_coding_pred_proportion[is.nan(vcf$fathmm_XF_coding_pred_proportion)] <- 0
 
@@ -1043,11 +953,12 @@ proband_annotation <- function(input, output_dir, header_length) {
 
   rm(vcf_binary_all_empty, vcf_binary_only, dbNSFP_count, binary_just_empty, binary_not_empty)
 
-  vcf <- select(vcf, address, chr, start, end, ref, alt, QUAL, FILTER, INFO, FORMAT, genotype, AF, Func.refGene, gene, GeneDetail.refGene, ExonicFunc.refGene, AAChange.refGene, CADD16_PHRED, dbNSFP_count)
+  vcf <- select(vcf, address, CHROM, start, end, ref, alt, QUAL, FILTER, INFO, FORMAT, genotype, AF, Func.refGene,
+                gene, GeneDetail.refGene, ExonicFunc.refGene, AAChange.refGene, CADD16_PHRED, dbNSFP_count)
 
   #Step 6. LOEUF Annotation############################################################
 
-  gnomad_constraints <- read_delim("{path_to_LOEUF}", "\t", escape_double =
+  gnomad_constraints <- read_delim(path_to_LOEUF_table, "\t", escape_double =
     FALSE, trim_ws = TRUE)
 
   gnomad_LOEUF <- subset(gnomad_constraints, select = c(gene, oe_lof_upper))
@@ -1055,14 +966,15 @@ proband_annotation <- function(input, output_dir, header_length) {
   vcf <- merge(x = vcf, y = gnomad_LOEUF, by = "gene", all.x = TRUE)
 
   names(vcf)[names(vcf) == "oe_lof_upper"] <- "LOEUF"
+  names(vcf)[names(vcf) == "CHROM"] <- "chr"
 
   rm(gnomad_constraints, gnomad_LOEUF)
 
   #Step 7. Gene Lists Annotation (denotes a logical if the variant is within the coordinates of the gene####
 
   #A. monogenic ibd 99 genelist annotation as 'monoibd99'
-  vcf$chrom <- as.factor(vcf$chr)
-  monoibd99_bed <- read.csv(glue("{path_to_monoibdpriority}/monoibd99.bed"))
+  vcf$chr <- as.factor(vcf$chr)
+  monoibd99_bed <- read.csv(file.path(path_to_monoibdpriority, "monoibd99.bed"))
 
   #remove the 'chr' from the start of the chromosome column
   monoibd99_bed$chrom <- gsub('chr', '', monoibd99_bed$chrom)
@@ -1077,7 +989,7 @@ proband_annotation <- function(input, output_dir, header_length) {
 
   #create a monoibd99 column that labels the variant "TRUE" if the gene name is found in the list of the 99 known monogenic genes
   vcf$monoibd99_by_name <- ifelse(variant_gene_list %in% monoibd99_list, TRUE, FALSE)
-  sum(vcf$monoibd99_by_name)
+  #   sum(vcf$monoibd99_by_name)
 
   #create a monoibd99 column that labels the variant "TRUE" if the interval is within a monoibd99 bed interval
   #set up a data.table form the bed df so can use the foverlaps function (that is within the data.table package)
@@ -1106,17 +1018,17 @@ proband_annotation <- function(input, output_dir, header_length) {
 
   #combine both mono criteria to make one column of monoibd99 TRUE/FALSE
   vcf$monoibd99 <- ifelse(((vcf$monoibd99_by_name == TRUE) | (vcf$monoibd99_via_bed == TRUE)), TRUE, FALSE)
-  sum(vcf$monoibd99)
+  #sum(vcf$monoibd99)
 
   #clean up vcf object so can be run through next annotation
   vcf <- subset(vcf, select = -c(short_address, monoibd99_by_name, chr.y, start.y, end.y, i.start, i.end, monoibd99_via_bed))
-  vcf <- rename(vcf, c("chr.x" = "chr", "start.x" = "start", "end.x" = "end"))
+  vcf <- rename(vcf, c("chr" = "chr.x", "start" = "start.x", "end" = "end.x"))
   rm(mono_by_interval, monoibd99_list, monoibd99_bed, monoibd99_bed_dt, vcf_simple)
 
 
   #B. IBD GWAS genelist annotation as 'GWAS440' - see section A for detailed comments on this process
   vcf$chrom <- as.factor(vcf$chr)
-  GWAS440_bed <- read.csv(glue("{path_to_monoibdpriority}/ibdgwas440.bed"))
+  GWAS440_bed <- read.csv(file.path(path_to_monoibdpriority, "ibdgwas440.bed"))
 
   GWAS440_bed$chrom <- gsub('chr', '', GWAS440_bed$chrom)
   names(GWAS440_bed)[names(GWAS440_bed) == "chrom"] <- "chr"
@@ -1127,7 +1039,7 @@ proband_annotation <- function(input, output_dir, header_length) {
   variant_gene_list <- vcf$gene
 
   vcf$GWAS440_by_name <- ifelse(variant_gene_list %in% GWAS440_list, TRUE, FALSE)
-  sum(vcf$GWAS440_by_name)
+  #sum(vcf$GWAS440_by_name)
 
   GWAS440_bed_dt <- subset(GWAS440_bed, select = c(chr, start, end))
   GWAS440_bed_dt <- as.data.table(GWAS440_bed_dt)
@@ -1148,16 +1060,16 @@ proband_annotation <- function(input, output_dir, header_length) {
   vcf$GWAS440_via_bed <- ifelse(!is.na(vcf$i.start), TRUE, FALSE)
 
   vcf$GWAS440 <- ifelse(((vcf$GWAS440_by_name == TRUE) | (vcf$GWAS440_via_bed == TRUE)), TRUE, FALSE)
-  sum(vcf$GWAS440)
+  # sum(vcf$GWAS440)
 
   vcf <- subset(vcf, select = -c(short_address, GWAS440_by_name, chr.y, start.y, end.y, i.start, i.end, GWAS440_via_bed))
-  vcf <- rename(vcf, c("chr.x" = "chr", "start.x" = "start", "end.x" = "end"))
+  vcf <- rename(vcf, c("chr" = "chr.x", "start" = "start.x", "end" = "end.x"))
   rm(mono_by_interval, GWAS440_list, GWAS440_bed, GWAS440_bed_dt, vcf_simple)
 
 
   #C. pid400 genelist annotation as 'pid400' - see section A for detailed comments on this process
   vcf$chrom <- as.factor(vcf$chr)
-  pid400_bed <- read.csv("~/Documents/Genomics/pid400.bed")
+  pid400_bed <- read.csv(file.path(path_to_monoibdpriority, "pid400.bed"))
 
   pid400_bed$chrom <- gsub('chr', '', pid400_bed$chrom)
   names(pid400_bed)[names(pid400_bed) == "chrom"] <- "chr"
@@ -1168,7 +1080,7 @@ proband_annotation <- function(input, output_dir, header_length) {
   variant_gene_list <- vcf$gene
 
   vcf$pid400_by_name <- ifelse(variant_gene_list %in% pid400_list, TRUE, FALSE)
-  sum(vcf$pid400_by_name)
+  # sum(vcf$pid400_by_name)
 
   pid400_bed_dt <- subset(pid400_bed, select = c(chr, start, end))
   pid400_bed_dt <- as.data.table(pid400_bed_dt)
@@ -1192,13 +1104,13 @@ proband_annotation <- function(input, output_dir, header_length) {
   sum(vcf$pid400)
 
   vcf <- subset(vcf, select = -c(short_address, pid400_by_name, chr.y, start.y, end.y, i.start, i.end, pid400_via_bed))
-  vcf <- rename(vcf, c("chr.x" = "chr", "start.x" = "start", "end.x" = "end"))
+  vcf <- rename(vcf, c("chr" = "chr.x", "start" = "start.x", "end" = "end.x"))
   rm(mono_by_interval, pid400_list, pid400_bed, pid400_bed_dt, vcf_simple)
 
 
   #D. cdg468 genelist annotation as 'cdg468 - see section A for detailed comments on this process
   vcf$chrom <- as.factor(vcf$chr)
-  cdg468_bed <- read.csv(glue("{path_to_monoibdpriority}/cdg468.bed"))
+  cdg468_bed <- read.csv(file.path(path_to_monoibdpriority, "cdg468.bed"))
 
   cdg468_bed$chrom <- gsub('chr', '', cdg468_bed$chrom)
   names(cdg468_bed)[names(cdg468_bed) == "chrom"] <- "chr"
@@ -1209,7 +1121,7 @@ proband_annotation <- function(input, output_dir, header_length) {
   variant_gene_list <- vcf$gene
 
   vcf$cdg468_by_name <- ifelse(variant_gene_list %in% cdg468_list, TRUE, FALSE)
-  sum(vcf$cdg468_by_name)
+  #sum(vcf$cdg468_by_name)
 
   cdg468_bed_dt <- subset(cdg468_bed, select = c(chr, start, end))
   cdg468_bed_dt <- as.data.table(cdg468_bed_dt)
@@ -1230,10 +1142,10 @@ proband_annotation <- function(input, output_dir, header_length) {
   vcf$cdg468_via_bed <- ifelse(!is.na(vcf$i.start), TRUE, FALSE)
 
   vcf$cdg468 <- ifelse(((vcf$cdg468_by_name == TRUE) | (vcf$cdg468_via_bed == TRUE)), TRUE, FALSE)
-  sum(vcf$cdg468)
+  #sum(vcf$cdg468)
 
   vcf <- subset(vcf, select = -c(short_address, cdg468_by_name, chr.y, start.y, end.y, i.start, i.end, cdg468_via_bed))
-  vcf <- rename(vcf, c("chr.x" = "chr", "start.x" = "start", "end.x" = "end"))
+  vcf <- rename(vcf, c("chr" = "chr.x", "start" = "start.x", "end" = "end.x"))
   rm(mono_by_interval, cdg468_list, cdg468_bed, cdg468_bed_dt, vcf_simple)
 
 
@@ -1255,7 +1167,7 @@ proband_annotation <- function(input, output_dir, header_length) {
 
   vcf$AF <- as.numeric(vcf$AF)
 
-  vcf <- subset(vcf, select = -c(chrom))
+  # vcf <- subset(vcf, select = -c(chrom))
 
   vcf <- select(vcf, gene,
                 Func.refGene,
@@ -1269,7 +1181,7 @@ proband_annotation <- function(input, output_dir, header_length) {
                 GWAS440,
                 pid400,
                 cdg468,
-                psc_genes,
+                #    psc_genes,
                 GeneDetail.refGene,
                 AAChange.refGene,
                 chr,
@@ -1280,7 +1192,7 @@ proband_annotation <- function(input, output_dir, header_length) {
   )
 
   #save the annotated VCF, ready for Part 3 (filtering)
-  annotation_output_phrase <- as.character(glue("{output_dir}/{patient_id}_annotated.csv"))
+  annotation_output_phrase <- as.character(file.path(output_dir, paste0(patient_id, "_annotated.csv")))
 
   write_csv(vcf, annotation_output_phrase)
 
@@ -1288,6 +1200,7 @@ proband_annotation <- function(input, output_dir, header_length) {
 
 #loop through input files
 for (i in seq_along(files)) {
-  skip <- vcf_header_count(files[i]) - 1
-  proband_annotation(files[i], "./", skip)
+  vcf.now <- file.path(path_to_files, files[i])
+  skip <- vcf_header_count(vcf.now) - 1
+  proband_annotation(vcf.now, "./out", skip)
 }

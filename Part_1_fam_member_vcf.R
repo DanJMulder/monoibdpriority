@@ -9,9 +9,8 @@ input_vcf_dir <- "path/to/files"
 
 
 library(tidyverse)
-library(glue) #for interpreting string literals
 
-files <- list.files(glue("{input_vcf_dir}"))
+files <- list.files(input_vcf_dir)
 
 vcf_header_count <- function(in_file) {
   # Returns the number of lines that the header section contains
@@ -65,6 +64,7 @@ fam_memb_processing <- function(input, output, num_header) {
 
 #loop through input files
 for (i in seq_along(files)) {
-  skip <- vcf_header_count(files[i]) - 1
-  fam_memb_processing(files[i], files[i], skip)
+  vcf.now <- paste0(input_vcf_dir, files[i])
+  skip <- vcf_header_count(vcf.now) - 1
+  fam_memb_processing(vcf.now, paste0(vcf.now, ".txt"), skip)
 }
