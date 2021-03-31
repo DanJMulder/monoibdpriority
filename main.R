@@ -1,35 +1,41 @@
-### Monogenic IBD Variant Prioritization
-##  Written by Daniel Mulder, February 2021
-#   Part 2 Proband VCF Annotation
+## Input files
+# OPTION 1: Provide a samplesheet and VCF directory
+vcf_dir <- ""
+family_units <- ""
+# OPTION 2: Specify trio
+proband_fn <- ""
+proband_sex <- ""
+paternal_fn <- ""
+paternal_affected <- ""
+maternal_fn <- ""
+maternal_affected <- ""
 
+# Output
+output_dir <- ""
 
-# Packages
-library(plyr)
-library(tidyverse)
-#library(choiceDes) #for saving delim (.in) files
-#library(pgirmess) #for saving to delim files
-#library(glue) #for interpreting string literals
-library(data.table) #for the foverlaps function used in gene_lists step 7
+# Options
+num.cpu <- 8
 
-
-# To use this script, the following user changes are needed (beyond the dependencies listed in the readme file):
-# 1. change "/path/to/files" on the line below to the local path to the folder containing only the proband VCFs
-path_to_files <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/data/proband"
-# 2. change "/path/to/dbNSFP4.1a" on the line below to the local path to the dbNSFP4.1a java applet
+# Tools
+# 1. change "/path/to/dbNSFP4.1a" on the line below to the local path to the dbNSFP4.1a java applet
 path_to_dbNSFP4.1a <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/dbNSFP4.1a/search_dbNSFP41a.jar"
-# 3. change "/path/to/annovar" on the line below to the local path to the folder containing the annovar libraries and db
+# 2. change "/path/to/annovar" on the line below to the local path to the folder containing the annovar libraries and db
 path_to_annovar <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/annovar"
 path_to_annovar_db <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/annovar/humandb"
-# 4. change "/path/to/cadd" on the line below to the local path to the folder containing the CADD scripts
+# 3. change "/path/to/cadd" on the line below to the local path to the folder containing the CADD scripts
 path_to_cadd <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/CADD-scripts-CADD1.6"
-# 5. change "/path/to/LOEUF" on the line below to the local path to the LOEUF table downloaded from gnomAD
+# 4. change "/path/to/LOEUF" on the line below to the local path to the LOEUF table downloaded from gnomAD
 path_to_LOEUF_table <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/gnomad.v2.1.1.lof_metrics.by_gene.txt"
-# 6. the 4 .bed files in the GitHub repository should be downloaded and placed in the local home directory
+# 5. the 4 .bed files in the GitHub repository should be downloaded and placed in the local home directory
 path_to_monoibdpriority <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/monoibdpriority"
-# The output of this step will be a .csv file placed in the home directory
 
+library(plyr)
+library(tidyverse)
+library(data.table)
 
-files <- list.files(path_to_files)
+is.specified <- function(value) {
+  return(value != "NA" && length(value) > 0)
+}
 
 vcf_header_count <- function(in_file) {
   # Returns the number of lines that the header section contains
@@ -49,18 +55,40 @@ vcf_header_count <- function(in_file) {
   return(header_size)
 }
 
-# Part 2 Script Structure Overview
+fam_memb_processing <- function(input, output) {
+  #load in vcf
+  vcf <- read_delim(input,
+                    "\t", escape_double = FALSE, trim_ws = TRUE,
+                    skip = vcf_header_count(input) - 1, col_types = cols('#CHROM' = col_factor()))
+  names(vcf)[names(vcf) == "#CHROM"] <- "chr"
+  vcf$chr <- as.factor(gsub('chr', '', vcf$chr))
 
-# annotate each variant with:
-# 1. dbNSFP (v4.1a) using dbNSFP java applet
-# 2. MAF (from gnomAD) and RefSeq using annovar
-# 3. CADD score (phred, v 1.6)
-# 4. LOEUF (from gnomAD) using offline table
-# 5. Gene_lists (monoIBD, IBD_GWAS, PID, CDG) from local BED files
-# 6. Het or Homozygous from alignment call (in VCF from the beginning)
+  #creating address column to enable merge with proband vcf
+  vcf$address <- paste0(vcf$chr, ":", vcf$POS)
+  vcf$address <- paste0(vcf$address, ":", vcf$REF)
+  vcf$address <- paste0(vcf$address, ":", vcf$ALT)
 
+  #create het_or_hom from GENOTYPE column########################
+  names(vcf)[10] <- "het_or_hom"
+  het_or_hom <- vcf$het_or_hom
+  vcf$het_or_hom <- substring(het_or_hom, 1, 3)
+  vcf$het_or_hom <- as.factor(vcf$het_or_hom)
 
-proband_annotation <- function(input, output_dir, header_length) {
+  vcf$het_or_hom <- gsub('0/1', 'het', vcf$het_or_hom)
+  vcf$het_or_hom <- gsub('1/1', 'hom_alt', vcf$het_or_hom)
+  vcf$het_or_hom <- gsub('1/2', 'hom_alt', vcf$het_or_hom)
+  vcf$het_or_hom <- as.factor(vcf$het_or_hom)
+
+  rm(het_or_hom)
+
+  vcf <- subset(vcf, select = c(address, het_or_hom))
+
+  write_csv(vcf, output)
+
+  rm(vcf)
+}
+
+proband_annotation <- function(input, output_dir) {
 
   # Step 1. Load in and prepare the VCF file ####
 
@@ -70,7 +98,7 @@ proband_annotation <- function(input, output_dir, header_length) {
 
   # Load the vcf into R
   vcf <- read_delim(input, "\t", escape_double = FALSE, trim_ws = TRUE,
-                    skip = header_length, col_types = cols('#CHROM' = col_factor()))
+                    skip = vcf_header_count(input) - 1, col_types = cols('#CHROM' = col_factor()))
   names(vcf)[names(vcf) == "#CHROM"] <- "Chr"
 
   # Remove the 'chr' from the start of the chromosome column
@@ -246,7 +274,8 @@ proband_annotation <- function(input, output_dir, header_length) {
   annovar_script <- file.path(path_to_annovar, "table_annovar.pl")
   annovar_phrase <- as.character(paste("perl", annovar_script, annovar_save, path_to_annovar_db,
                                        "-buildver hg38 -out", annovar_out_prefix, "-remove",
-                                       "-protocol gnomad211_exome,refGene -operation f,g -nastring ."))
+                                       "-protocol gnomad211_exome,refGene -operation f,g -nastring .",
+                                       "--thread", num.cpu))
 
   # Annotation w MAF (gnomAD 2.1.1) and refGene via annovar via terminal command
   system(annovar_phrase)
@@ -1181,7 +1210,6 @@ proband_annotation <- function(input, output_dir, header_length) {
                 GWAS440,
                 pid400,
                 cdg468,
-                #    psc_genes,
                 GeneDetail.refGene,
                 AAChange.refGene,
                 chr,
@@ -1198,9 +1226,168 @@ proband_annotation <- function(input, output_dir, header_length) {
 
 }
 
-#loop through input files
-for (i in seq_along(files)) {
-  vcf.now <- file.path(path_to_files, files[i])
-  skip <- vcf_header_count(vcf.now) - 1
-  proband_annotation(vcf.now, "./out", skip)
+filter.annotations <- function(out.prefix, proband.fn, proband.sex,
+                               paternal.fn, paternal.affected,
+                               maternal.fn, maternal.affected) {
+  # Part 1 - Loading VCFs ####
+
+  # proband; create address column as primary key; add sex
+  proband.vcf <- read_csv(proband.fn, col_types = cols(chr = col_character())) %>%
+    mutate(address = paste(chr, start, ref, alt, sep = ":"), sex = proband.sex) %>%
+    rename(proband_het_or_hom = het_or_hom)  # Rename column to avoid conflicts
+
+  # paternal VCF
+  if (!is.na(paternal.fn)) {
+    pat.vcf <- read_csv(paternal.fn)
+    proband.vcf <- mutate(proband.vcf, father_affected = paternal.affected) %>%
+      left_join(pat.vcf, by = "address", na_matches = "never") %>%
+      mutate(pat_het_or_hom = if_else(is.na(het_or_hom), "unknown", het_or_hom)) %>%
+      select(-het_or_hom)
+  } else {
+    proband.vcf <- mutate(proband.vcf, father_affected = "unknown",
+                          pat_het_or_hom = "unknown")
+  }
+
+  # maternal VCF
+  if (!is.na(maternal.fn)) {
+    mat.vcf <- read_csv(maternal.fn)
+    proband.vcf <- mutate(proband.vcf, mother_affected = maternal.affected) %>%
+      left_join(mat.vcf, by = "address", na_matches = "never") %>%
+      mutate(mat_het_or_hom = if_else(is.na(het_or_hom), "unknown", het_or_hom)) %>%
+      select(-het_or_hom)
+  } else {
+    proband.vcf <- mutate(proband.vcf, mother_affected = "unknown",
+                          mat_het_or_hom = "unknown")
+  }
+
+  # Fix that name
+  proband.vcf <- rename(proband.vcf, het_or_hom = proband_het_or_hom)
+
+  # Part 2 - Inheritance Annotation ####
+
+  #RECESSIVE INHERITANCE OF VARAINT (full penetrance not assumed, just inheritance at this stage, no affectation assumption)
+  proband.vcf <- mutate(
+    proband.vcf,
+    recessive_inheritance = if_else(
+      ((pat_het_or_hom == "het" | pat_het_or_hom == "hom_alt") &
+        (mat_het_or_hom == "het" | mat_het_or_hom == "hom_alt") &
+        het_or_hom == "hom_alt"),
+      TRUE, FALSE))
+  #DOMINANT INHERITANCE - the variant is het or hom and comes from an affected family member
+  proband.vcf <- mutate(
+    proband.vcf,
+    dominant_inheritance = if_else(
+      (((pat_het_or_hom == "het" | pat_het_or_hom == "hom_alt") & father_affected == "TRUE") |
+        ((mat_het_or_hom == "het" | mat_het_or_hom == "hom_alt") & mother_affected == "TRUE") |
+        het_or_hom == "het"),
+      TRUE, FALSE))
+  #X LINKED - the variant is het or hom_alt and is on X and patient is male
+  proband.vcf <- mutate(
+    proband.vcf,
+    XL_inheritance = if_else(chr == "X" & sex == "male", TRUE, FALSE))
+
+  # combine patterns
+  proband.vcf <- mutate(
+    proband.vcf,
+    inheritance = case_when(pat_het_or_hom == "unknown" | mat_het_or_hom == "unknown" ~ "unknown",
+                            recessive_inheritance == TRUE ~ "recessive",
+                            dominant_inheritance == TRUE ~ "dominant",
+                            XL_inheritance == TRUE ~ "x_linked",
+                            TRUE ~ "other"))
+  proband.vcf <- distinct(proband.vcf)
+
+  #Part 3 - Filtering ####
+
+  proband.vcf <- select(proband.vcf,
+                        gene,
+                        Func.refGene,
+                        ExonicFunc.refGene,
+                        het_or_hom,
+                        AF,
+                        CADD16_PHRED,
+                        dbNSFP_count,
+                        LOEUF,
+                        monoibd99,
+                        GWAS440,
+                        pid400,
+                        cdg468,
+                        GeneDetail.refGene,
+                        AAChange.refGene,
+                        everything(),
+                        -address,
+                        -recessive_inheritance,
+                        -dominant_inheritance,
+                        -XL_inheritance
+  )
+
+  # save unfiltered vcf
+  write_csv(proband.vcf, paste0(out.prefix, "_unfiltered.csv"))
+
+  # filtering parameters (can easily be adjusted at this step)
+  proband.vcf <- subset(proband.vcf,
+                        (Func.refGene == "exonic" | is.na(Func.refGene)) &
+                          ((AF < 0.003) &
+                            ((CADD16_PHRED > 18) | is.na(CADD16_PHRED)) &
+                            ((dbNSFP_count >= 3) | is.na(dbNSFP_count)) &
+                            ((LOEUF < 1.50) | is.na(LOEUF)) &
+                            ((monoibd99 == TRUE) |
+                              (pid400 == TRUE))))
+
+  # sort variants so most likely monogenic at top
+  proband.vcf <- arrange(proband.vcf, desc(monoibd99), desc(ExonicFunc.refGene), AF, desc(CADD16_PHRED))
+
+  # save filtered vcf
+  write_csv(proband.vcf, paste0(out.prefix, "_filtered.csv"))
+}
+
+process_trio <- function(out.dir, proband.fn, proband.sex,
+                         pat.fn = NA, pat.affect = "unknown",
+                         mat.fn = NA, mat.affect = "unknown") {
+  dir.create(out.dir)
+
+  if (is.specified(pat.fn)) {
+    fmted.pat.fn <- file.path(out.dir, gsub(".vcf", ".txt", basename(pat.fn), fixed = TRUE))
+    if (!file.exists(fmted.pat.fn)) {
+      fam_memb_processing(pat.fn, fmted.pat.fn)
+    }
+  } else {
+    fmted.pat.fn <- NA
+    pat.affect <- "unknown"
+  }
+  if (is.specified(mat.fn)) {
+    fmted.mat.fn <- file.path(out.dir, gsub(".vcf", ".txt", basename(mat.fn), fixed = TRUE))
+    if (!file.exists(fmted.mat.fn)) {
+      fam_memb_processing(mat.fn, fmted.mat.fn)
+    }
+  } else {
+    fmted.pat.fn <- NA
+    mat.affect <- "unknown"
+  }
+  annotated.proband.fn <- file.path(out.dir, gsub(".vcf", "_annotated.csv",
+                                                  basename(proband.fn), fixed = TRUE))
+  if (!file.exists(annotated.proband.fn)) {
+    proband_annotation(proband.fn, out.dir)
+  }
+  final_out.prefix <- file.path(out.dir, gsub(".vcf", "", basename(proband.fn), fixed = TRUE))
+  filter.annotations(final_out.prefix, annotated.proband.fn, proband.sex,
+                     fmted.pat.fn, pat.affect, fmted.mat.fn, mat.affect)
+
+  return()
+}
+
+if (is.specified(vcf_dir) && is.specified(family_units)) {
+  if (endsWith(family_units, ".xlsx") || endsWith(family_units, ".xls")) {
+    library(readxl)
+    family_data <- read_excel(family_units)
+  } else {
+    family_data <- read_csv(family_units)
+  }
+  pwalk(family_data, function(proband, sex, paternal, paternal_affected, maternal, maternal_affected,
+                              vcf_suffix = ".hc.vcf") {
+    proband_file <- file.path(vcf_dir, paste0(proband, vcf_suffix))
+    paternal_file <- ifelse(paternal == "NA", NA, file.path(vcf_dir, paste0(paternal, vcf_suffix)))
+    maternal_file <- ifelse(maternal == "NA", NA, file.path(vcf_dir, paste0(maternal, vcf_suffix)))
+    process_trio(output_dir, proband_file, sex, paternal_file, paternal_affected,
+                 maternal_file, maternal_affected)
+  })
 }
