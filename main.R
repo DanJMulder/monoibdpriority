@@ -1,4 +1,8 @@
-## Input files
+#!/usr/bin/env Rscript
+### Monogenic IBD Variant Prioritization
+##  Written by Daniel Mulder, February 2021
+
+# ## Input files
 # OPTION 1: Provide a samplesheet and VCF directory
 vcf_dir <- ""
 family_units <- ""
@@ -17,26 +21,30 @@ output_dir <- ""
 num.cpu <- 8
 
 # Tools
-# 1. change "/path/to/dbNSFP4.1a" on the line below to the local path to the dbNSFP4.1a java applet
-path_to_dbNSFP4.1a <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/dbNSFP4.1a/search_dbNSFP41a.jar"
-# 2. change "/path/to/annovar" on the line below to the local path to the folder containing the annovar libraries and db
-path_to_annovar <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/annovar"
-path_to_annovar_db <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/annovar/humandb"
-# 3. change "/path/to/cadd" on the line below to the local path to the folder containing the CADD scripts
-path_to_cadd <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/CADD-scripts-CADD1.6"
+# 1. change to the folder containing the dbNSFP4.1a java applet (search_dbNSFP41a.class)
+path_to_dbNSFP4.1a <- "/path/to/dbNSFP4.1a"
+# 2. change the lines below to the folder containing the annovar libraries and db
+path_to_annovar <- "/path/to/annovar"
+path_to_annovar_db <- "/path/to/annovar/humandb"
+# 3. change the line below to the local path to the folder containing the CADD scripts
+path_to_cadd <- "/path/to/CADD-scripts-CADD1.6"
 # 4. change "/path/to/LOEUF" on the line below to the local path to the LOEUF table downloaded from gnomAD
-path_to_LOEUF_table <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/bin/gnomad.v2.1.1.lof_metrics.by_gene.txt"
-# 5. the 4 .bed files in the GitHub repository should be downloaded and placed in the local home directory
-path_to_monoibdpriority <- "/hpf/largeprojects/ccmbio/lmichael/ibdvariantprioritization/monoibdpriority"
+path_to_LOEUF_table <- "/path/to/gnomad.v2.1.1.lof_metrics.by_gene.txt"
+# 5. change the line below to the directory containing the 4 bed files for the repository
+path_to_monoibdpriority <- "/path/to/monoibdpriority"
 
 library(plyr)
 library(tidyverse)
 library(data.table)
 
+# Helper function to determine if a parameter is truthy
 is.specified <- function(value) {
-  return(value != "NA" && length(value) > 0)
+  return(!is.na(value) &&
+           (value != "NA" || value != "unknown") &&
+           length(value) > 0)
 }
 
+# Helper function to help determine how many lines a VCF header contains, includes the column names
 vcf_header_count <- function(in_file) {
   # Returns the number of lines that the header section contains
   # This function reads in data line-by-line, so it should remain fast and lightweight in most cases
@@ -54,6 +62,7 @@ vcf_header_count <- function(in_file) {
   close(file_handle)
   return(header_size)
 }
+
 
 fam_memb_processing <- function(input, output) {
   #load in vcf
@@ -88,8 +97,18 @@ fam_memb_processing <- function(input, output) {
   rm(vcf)
 }
 
-proband_annotation <- function(input, output_dir) {
 
+proband_annotation <- function(input, output_dir) {
+  # Part 2 Script Structure Overview
+
+  # annotate each variant with:
+  # 1. dbNSFP (v4.1a) using dbNSFP java applet
+  # 2. MAF (from gnomAD) and RefSeq using annovar
+  # 3. CADD score (phred, v 1.6)
+  # 4. LOEUF (from gnomAD) using offline table
+  # 5. Gene_lists (monoIBD, IBD_GWAS, PID, CDG) from local BED files
+  # 6. Het or Homozygous from alignment call (in VCF from the beginning)
+  print(paste("Processing proband:", input))
   # Step 1. Load in and prepare the VCF file ####
 
   # Create a string variable w just the input file name (as the patient ID)
@@ -120,9 +139,14 @@ proband_annotation <- function(input, output_dir) {
   # Running dbNSFP java applet via command line to add dbNSFP annotations
   # Note, changing the directory here does not affect R's current working directory.
   # We need to use a slightly different command in order to run without any GUIs
-  dbnsfp_phrase <- as.character(paste("module load java; cd", dirname(path_to_dbNSFP4.1a),
+  dbnsfp_phrase <- as.character(paste("module load java; cd", path_to_dbNSFP4.1a,
                                       "; java search_dbNSFP41a -i", input_in, "-o", dbnsfp_output, "-v hg38"))
-  system(dbnsfp_phrase)
+  if (!file.exists(dbnsfp_output)) {
+    print(paste0("Running command:\n", dbnsfp_phrase))
+    system(dbnsfp_phrase)
+  } else {
+    print(paste("Skipping dbnsfp because", dbnsfp_output, "exists."))
+  }
 
   # load the dbnsfp result into R and add an end column
   vcf_post_dbnsfp <- read_delim(dbnsfp_output,
@@ -268,6 +292,7 @@ proband_annotation <- function(input, output_dir) {
 
   annovar_save <- file.path(output_dir, paste0(patient_id, ".txt"))
   annovar_out_prefix <- file.path(output_dir, patient_id)
+  annovar_out <- paste0(annovar_out_prefix, ".hg38_multianno.txt")
 
   write_delim(vcf, annovar_save, delim = "\t", na = ".", col_names = TRUE, quote_escape = FALSE)
 
@@ -278,10 +303,15 @@ proband_annotation <- function(input, output_dir) {
                                        "--thread", num.cpu))
 
   # Annotation w MAF (gnomAD 2.1.1) and refGene via annovar via terminal command
-  system(annovar_phrase)
+  if (!file.exists(annovar_out)) {
+    print(paste("Running command:", annovar_phrase, sep = "\n"))
+    system(annovar_phrase)
+  } else {
+    print(paste("Skipping annovar because", annovar_out, "exists."))
+  }
 
   # load in the results of annovar (will also include dbNSFP annotations)
-  post_annovar <- read_delim(paste0(annovar_out_prefix, ".hg38_multianno.txt"),
+  post_annovar <- read_delim(annovar_out,
                              "\t",
                              escape_double = FALSE,
                              trim_ws = TRUE,
@@ -322,10 +352,15 @@ proband_annotation <- function(input, output_dir) {
 
   write_delim(vcf, cadd_save, delim = "\t", na = ".", col_names = TRUE, quote_escape = FALSE)
 
-  cadd_phrase <- paste(file.path(path_to_cadd, "CADD.sh"), "-c", num.cpu, cadd_save)
+  cadd_phrase <- paste(file.path(path_to_cadd, "CADD.sh"), "-p -c", num.cpu, cadd_save)
 
   # terminal command to run offline local cadd command line program
-  system(cadd_phrase)
+  if (!file.exists(cadd_output)) {
+    print(paste("Running command:", cadd_phrase, sep = "\n"))
+    system(cadd_phrase)
+  } else {
+    print(paste("Skipping CADD because", cadd_output, "exists."))
+  }
 
   # creating "address" column as a primary key for each data frame to enable merge
   vcf$address <- paste0(vcf[, "#CHROM"], ":", vcf$start)
@@ -982,6 +1017,8 @@ proband_annotation <- function(input, output_dir) {
 
   rm(vcf_binary_all_empty, vcf_binary_only, dbNSFP_count, binary_just_empty, binary_not_empty)
 
+  names(vcf)[names(vcf) == "#CHROM"] <- "CHROM"
+
   vcf <- select(vcf, address, CHROM, start, end, ref, alt, QUAL, FILTER, INFO, FORMAT, genotype, AF, Func.refGene,
                 gene, GeneDetail.refGene, ExonicFunc.refGene, AAChange.refGene, CADD16_PHRED, dbNSFP_count)
 
@@ -1229,6 +1266,12 @@ proband_annotation <- function(input, output_dir) {
 filter.annotations <- function(out.prefix, proband.fn, proband.sex,
                                paternal.fn, paternal.affected,
                                maternal.fn, maternal.affected) {
+  # Filtering the variants
+  # Script overview:
+  # 1. load in proband vcf (from Part 2 script) and family member vcfs (from Part 1 script) to annotate proband vcf
+  # 2. filter variants
+  # 3. reorder variants so they are prioritized (highest are most likely damaging)
+  # 4. save output to a .csv file for further analysis
   # Part 1 - Loading VCFs ####
 
   # proband; create address column as primary key; add sex
@@ -1289,8 +1332,7 @@ filter.annotations <- function(out.prefix, proband.fn, proband.sex,
   # combine patterns
   proband.vcf <- mutate(
     proband.vcf,
-    inheritance = case_when(pat_het_or_hom == "unknown" | mat_het_or_hom == "unknown" ~ "unknown",
-                            recessive_inheritance == TRUE ~ "recessive",
+    inheritance = case_when(recessive_inheritance == TRUE ~ "recessive",
                             dominant_inheritance == TRUE ~ "dominant",
                             XL_inheritance == TRUE ~ "x_linked",
                             TRUE ~ "other"))
@@ -1343,7 +1385,7 @@ filter.annotations <- function(out.prefix, proband.fn, proband.sex,
 process_trio <- function(out.dir, proband.fn, proband.sex,
                          pat.fn = NA, pat.affect = "unknown",
                          mat.fn = NA, mat.affect = "unknown") {
-  dir.create(out.dir)
+  dir.create(out.dir, showWarnings = F)
 
   if (is.specified(pat.fn)) {
     fmted.pat.fn <- file.path(out.dir, gsub(".vcf", ".txt", basename(pat.fn), fixed = TRUE))
@@ -1375,7 +1417,10 @@ process_trio <- function(out.dir, proband.fn, proband.sex,
   return()
 }
 
+# Main function // Run the analysis with given inputs at the top of the script
+
 if (is.specified(vcf_dir) && is.specified(family_units)) {
+  # Option 1 used
   if (endsWith(family_units, ".xlsx") || endsWith(family_units, ".xls")) {
     library(readxl)
     family_data <- read_excel(family_units)
@@ -1390,4 +1435,8 @@ if (is.specified(vcf_dir) && is.specified(family_units)) {
     process_trio(output_dir, proband_file, sex, paternal_file, paternal_affected,
                  maternal_file, maternal_affected)
   })
+} else {
+  # Option 2 used
+  process_trio(output_dir, proband_fn, proband_sex,
+               paternal_fn, paternal_affected, maternal_fn, maternal_affected)
 }

@@ -22,7 +22,10 @@ Dependencies for annotating VCFs are:
 4. A local copy of the gene constraint metrics from gnomAD (v 2.1.1, https://gnomad.broadinstitute.org/downloads#v2-constraint)
 5. A local copy of the bed files containing the relevant gene co-ordinates
 
-Required software packages are listed at the beginning of each script and can be installed using the `install.packages()` function.
+Required software packages are listed at the beginning of each script and can be installed using the `install.
+packages()` function. You will need:
+* tidyverse
+* data.table
 
 Running this pipeline consists of 3 steps, which are separated into 3 numbered R scripts:
 1. Family member VCF Processing. Processed into the appropriate format to remove unused data and allow inheritance modelling.
