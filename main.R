@@ -382,7 +382,7 @@ proband_annotation <- function(input, output_dir) {
   vcf$AF <- as.character(vcf$AF)
 
   vcf <- merge(vcf, cadd_score, by = "address", all.x = TRUE)
-
+  vcf <- select(vcf, -c("CHROM", "Pos", "Ref", "Alt"))
   rm(cadd_score)
 
 
@@ -1018,9 +1018,9 @@ proband_annotation <- function(input, output_dir) {
 
   rm(vcf_binary_all_empty, vcf_binary_only, dbNSFP_count, binary_just_empty, binary_not_empty)
 
-  names(vcf)[names(vcf) == "#CHROM"] <- "CHROM"
+  names(vcf)[names(vcf) == "#CHROM"] <- "chr"
 
-  vcf <- select(vcf, address, CHROM, start, end, ref, alt, QUAL, FILTER, INFO, FORMAT, genotype, AF, Func.refGene,
+  vcf <- select(vcf, address, chr, start, end, ref, alt, QUAL, FILTER, INFO, FORMAT, genotype, AF, Func.refGene,
                 gene, GeneDetail.refGene, ExonicFunc.refGene, AAChange.refGene, CADD16_PHRED, dbNSFP_count)
 
   #Step 6. LOEUF Annotation############################################################
@@ -1033,7 +1033,6 @@ proband_annotation <- function(input, output_dir) {
   vcf <- merge(x = vcf, y = gnomad_LOEUF, by = "gene", all.x = TRUE)
 
   names(vcf)[names(vcf) == "oe_lof_upper"] <- "LOEUF"
-  names(vcf)[names(vcf) == "CHROM"] <- "chr"
 
   rm(gnomad_constraints, gnomad_LOEUF)
 
@@ -1403,7 +1402,7 @@ process_trio <- function(out.dir, proband.fn, proband.sex,
       fam_memb_processing(mat.fn, fmted.mat.fn)
     }
   } else {
-    fmted.pat.fn <- NA
+    fmted.mat.fn <- NA
     mat.affect <- "unknown"
   }
   annotated.proband.fn <- file.path(out.dir, gsub(".vcf", "_annotated.csv",
