@@ -145,8 +145,6 @@ proband_annotation <- function(input, output_dir) {
   names(vcf)[names(vcf) == "ALT"] <- "alt"
   names(vcf)[9] <- "genotype"
 
-  # remove the vcf_post_dbnsfp columns not needed (steps i to iii)
-
   # clean up column names for ease of use
   names(vcf_post_dbnsfp)[names(vcf_post_dbnsfp) == "#chr"] <- "chr"
   names(vcf_post_dbnsfp)[names(vcf_post_dbnsfp) == "pos(1-based)"] <- "start"
