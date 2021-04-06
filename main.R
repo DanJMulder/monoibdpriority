@@ -2,7 +2,7 @@
 ### Monogenic IBD Variant Prioritization
 ##  Written by Daniel Mulder, February 2021
 
-# ## Input files
+## Input files
 # OPTION 1: Provide a samplesheet and VCF directory
 vcf_dir <- ""
 family_units <- ""
@@ -28,7 +28,7 @@ path_to_annovar <- "/path/to/annovar"
 path_to_annovar_db <- "/path/to/annovar/humandb"
 # 3. change the line below to the local path to the folder containing the CADD scripts
 path_to_cadd <- "/path/to/CADD-scripts-CADD1.6"
-# 4. change "/path/to/LOEUF" on the line below to the local path to the LOEUF table downloaded from gnomAD
+# 4. change the line below to the local path to the LOEUF table downloaded from gnomAD
 path_to_LOEUF_table <- "/path/to/gnomad.v2.1.1.lof_metrics.by_gene.txt"
 # 5. change the line below to the directory containing the 4 bed files for the repository
 path_to_monoibdpriority <- "/path/to/monoibdpriority"
