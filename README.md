@@ -9,7 +9,24 @@ We have accrued a large cohort of pediatric patients with IBD (n = 1005 probands
 In the study related to this repository, we used statistical analysis of our large cohort WES data to identify a small set of characteristics of in silico predictive features of a variant that are highly predictive of a disease causing variant.
 
 ## Pipeline Overview
-Input: proband VCF +/- one or both parental VCFs
+Input: Input data can be specified in one of two ways. All files should be uncompressed.
+1. Specifying a single set of data comprising the proband VCF +/- one or both parental VCFs
+2. An Excel or CSV file specifying multiple datasets to operate as a batch and the directory containing all the VCFs.
+   The file suffix should be specified (e.g. "hc.vcf").
+    * The first line of the Excel or CSV file must contain the following column names as the header:
+        1. proband
+            * The ID of the proband. 
+        2. sex
+            * Values must be either male or female
+        3. paternal
+            * The ID of the paternal parent. If there is no VCF data available, use the value "unknown" (without quotes)
+        4. paternal_affected
+            * Values must either be TRUE, FALSE, or unknown
+        5. maternal
+            * The ID of the maternal parent. If there is no VCF data available, use the value "unknown" (without quotes)
+        6. maternal_affected
+            * Values must either be TRUE, FALSE, or unknown
+    * VCF files are assumed to be located in a specified VCF directory and named as {id}{vcf_suffix}
 
 Output: annotated VCF-style files as comma separated value files (both filtered+prioritizes and unfiltered versions for further manual curation/analysis)
 
@@ -22,9 +39,11 @@ Dependencies for annotating VCFs are:
 4. A local copy of the gene constraint metrics from gnomAD (v 2.1.1, https://gnomad.broadinstitute.org/downloads#v2-constraint)
 5. A local copy of the bed files containing the relevant gene co-ordinates
 
-Required software packages are listed at the beginning of each script and can be installed using the `install.packages()` function.
+Required software packages are listed at the beginning of each script and can be installed using the `install.packages()` function. You will need:
+* tidyverse
+* data.table
 
-Running this pipeline consists of 3 steps, which are separated into 3 numbered R scripts:
+The pipeline consists of 3 steps:
 1. Family member VCF Processing. Processed into the appropriate format to remove unused data and allow inheritance modelling.
 2. Proband VCF annotation. Includes a dbNSFP custom damaging score count, refSeq gene details, minor allele frequency (via gnomad versiona 2.1.1), CADD score, and LOEUF.
 3. Inheritance modeling. For each variant where family members are available, and variant filtering and prioritization based on features likely to identify a disease causing variant. Filtering and prioritization parameters can be adjusted by the user to improve identification of a monogenic variant.
