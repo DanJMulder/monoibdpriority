@@ -6,6 +6,7 @@
 # OPTION 1: Provide a samplesheet and VCF directory
 vcf_dir <- ""
 family_units <- ""
+vcf_suffix <- ".hc.vcf"
 # OPTION 2: Specify trio
 proband_fn <- ""
 proband_sex <- ""
@@ -1427,8 +1428,7 @@ if (is.specified(vcf_dir) && is.specified(family_units)) {
   } else {
     family_data <- read_csv(family_units)
   }
-  pwalk(family_data, function(proband, sex, paternal, paternal_affected, maternal, maternal_affected,
-                              vcf_suffix = ".hc.vcf") {
+  pwalk(family_data, function(proband, sex, paternal, paternal_affected, maternal, maternal_affected) {
     proband_file <- file.path(vcf_dir, paste0(proband, vcf_suffix))
     paternal_file <- ifelse(paternal == "NA", NA, file.path(vcf_dir, paste0(paternal, vcf_suffix)))
     maternal_file <- ifelse(maternal == "NA", NA, file.path(vcf_dir, paste0(maternal, vcf_suffix)))
