@@ -2,38 +2,11 @@
 ### Monogenic IBD Variant Prioritization
 ##  Written by Daniel Mulder, February 2021
 
-## Input files
-# OPTION 1: Provide a samplesheet and VCF directory
-vcf_dir <- ""
-family_units <- ""  # Must have the following columns: proband, sex, paternal, paternal_affected, maternal,
-# maternal_affected
-vcf_suffix <- ".hc.vcf"  # VCFs will assume to be {vcf_dir}/{id}{vcf_suffix}
-# OPTION 2: Specify trio
-proband_fn <- ""
-proband_sex <- ""  # One of "male" or "female"
-paternal_fn <- ""
-paternal_affected <- ""  # One of "TRUE", "FALSE", or "unknown"
-maternal_fn <- ""
-maternal_affected <- ""  # One of "TRUE", "FALSE", or "unknown"
-
-# Output, will be created if not present
-output_dir <- ""
-
-# Options
-num.cpu <- 8
+# Load R files
+source("input.R")
 
 # Tools
-# 1. change to the folder containing the dbNSFP4.1a java applet (search_dbNSFP41a.class)
-path_to_dbNSFP4.1a <- "/path/to/dbNSFP4.1a"
-# 2. change the lines below to the folder containing the annovar libraries and db
-path_to_annovar <- "/path/to/annovar"
-path_to_annovar_db <- "/path/to/annovar/humandb"
-# 3. change the line below to the local path to the folder containing the CADD scripts
-path_to_cadd <- "/path/to/CADD-scripts-CADD1.6"
-# 4. change the line below to the local path to the LOEUF table downloaded from gnomAD
-path_to_LOEUF_table <- "/path/to/gnomad.v2.1.1.lof_metrics.by_gene.txt"
-# 5. change the line below to the directory containing the 4 bed files for the repository
-path_to_monoibdpriority <- "/path/to/monoibdpriority"
+source("dependencies.R")
 
 library(plyr)
 library(tidyverse)
