@@ -6,14 +6,14 @@ args <- commandArgs(trailingOnly=TRUE)
 
 num_args <- length(args)
 if (num_args == 0) {
-        input_file = "input.R"
-        dependencies_file = "dependencies.R"
+        input_file <- "input.R"
+        dependencies_file <- "dependencies.R"
 } else if (num_args == 1) {
-        input_file = args[1]
-        dependencies_file = "dependencies.R"
+        input_file <- args[1]
+        dependencies_file <- "dependencies.R"
 } else {
-        input_file = args[1]
-        dependencies_file = args[2]
+        input_file <- args[1]
+        dependencies_file <- args[2]
 }
 
 # Load R files
