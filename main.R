@@ -200,7 +200,7 @@ proband_annotation <- function(input, output_dir) {
   names(vcf_post_dbnsfp)[names(vcf_post_dbnsfp) == "Eigen-PC-phred_coding"] <- "Eigen_PC_phred_coding"
   names(vcf_post_dbnsfp)[names(vcf_post_dbnsfp) == "H1-hESC_fitCons_rankscore"] <- "H1_hESC_fitCons_rankscore"
 
-  write_tsv(vcf_post_dbnsfp, file.path(output_dir, paste0(patient_id, "dbnsfp_full.tsv")), na = ".", quote = FALSE)
+  write_tsv(vcf_post_dbnsfp, file.path(output_dir, paste0(patient_id, "_dbnsfp_full.tsv")), na = ".", quote = FALSE)
 
   # make a list of the desired columns
   desired_columns <- c("chr",
