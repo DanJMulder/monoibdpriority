@@ -2,18 +2,19 @@
 ### Monogenic IBD Variant Prioritization
 ##  Written by Daniel Mulder, February 2021
 
-args <- commandArgs(trailingOnly=TRUE)
+# NOTE: input.R and dependencies.R must be in the current working directory if not specified in the command line
+args <- commandArgs(trailingOnly = TRUE)
 
 num_args <- length(args)
 if (num_args == 0) {
-        input_file <- "input.R"
-        dependencies_file <- "dependencies.R"
+  input_file <- "input.R"
+  dependencies_file <- "dependencies.R"
 } else if (num_args == 1) {
-        input_file <- args[1]
-        dependencies_file <- "dependencies.R"
+  input_file <- args[1]
+  dependencies_file <- "dependencies.R"
 } else {
-        input_file <- args[1]
-        dependencies_file <- args[2]
+  input_file <- args[1]
+  dependencies_file <- args[2]
 }
 
 # Load R files
@@ -122,6 +123,8 @@ proband_annotation <- function(input, output_dir) {
   # Save smaller vcf dataframe to folder so dbNSFP java applet can use it
   input_in <- file.path(output_dir, paste0(patient_id, ".in"))
   dbnsfp_output <- file.path(output_dir, paste0(patient_id, ".out"))
+  dbscsnv_output <- paste0(dbnsfp_output, ".dbscSNV")
+  spliceai_output <- paste0(dbnsfp_output, ".SpliceAI")
   write_tsv(vcf_for_dbnsfp, input_in, na = ".", quote = FALSE)
   rm(vcf_for_dbnsfp)
 
@@ -129,8 +132,11 @@ proband_annotation <- function(input, output_dir) {
   # Note, changing the directory here does not affect R's current working directory.
   # We need to use a slightly different command in order to run without any GUIs
   dbnsfp_phrase <- as.character(paste("module load java; cd", path_to_dbNSFP4.1a,
-                                      "; java search_dbNSFP41a -i", input_in, "-o", dbnsfp_output, "-v hg38"))
-  if (!file.exists(dbnsfp_output)) {
+                                      "; java search_dbNSFP41a -s -i", input_in, "-o", dbnsfp_output, "-v hg38"))
+  if (!file.exists(dbnsfp_output) ||
+    !file.exists(dbscsnv_output) ||
+    !file.exists(spliceai_output)) {
+    # If any file is missing, rerun the analysis
     print(paste0("Running command:\n", dbnsfp_phrase))
     system(dbnsfp_phrase)
   } else {
@@ -138,18 +144,38 @@ proband_annotation <- function(input, output_dir) {
   }
 
   # load the dbnsfp result into R and add an end column
-  vcf_post_dbnsfp <- read_delim(dbnsfp_output,
-                                "\t",
+  vcf_post_dbnsfp <- read_delim(dbnsfp_output, delim = "\t",
                                 escape_double = FALSE,
                                 col_names = TRUE,
                                 trim_ws = TRUE,
                                 na = ".",
                                 guess_max = 200000,
                                 col_types = cols('#chr' = col_factor(), 'hg19_chr' = col_factor(),
-                                                 'hg18_chr' = col_factor()))
+                                                 'hg18_chr' = col_factor(), 'MIM_id' = col_character()))
+  # Attached database dbscSNV
+  vcf_dbscsnv <- read_delim(dbscsnv_output, delim = "\t",
+                            escape_double = FALSE, col_names = TRUE,
+                            trim_ws = TRUE, na = ".", guess_max = 200000,
+                            col_types = cols('chr' = col_factor(),
+                                             'hg38_chr' = col_factor())) %>% select(chr:rf_score) # Unique columns
+  # Attached database SpliceAI
+  vcf_spliceai <- read_delim(spliceai_output, delim = "\t",
+                            escape_double = FALSE, col_names = TRUE,
+                            trim_ws = TRUE, na = ".", guess_max = 200000,
+                            col_types = cols('chr' = col_factor())) %>% select(chr:SpliceAI_DL) # Unique columns
+
+  # Merge splice annotations
+  vcf_splice_annot <- full_join(vcf_spliceai, vcf_dbscsnv,
+                                by = c("chr" = "hg38_chr", "pos" = "hg38_pos", "ref" = "ref", "alt" = "alt")) %>%
+    select(-c(chr.y, pos.y)) %>% group_by(chr, pos, ref, alt) %>%
+    summarize_all(list(~paste(na.omit(.), collapse = ";")))
+
+  # Merge with main annotation from dbnsfp
+  vcf_post_dbnsfp <- full_join(vcf_post_dbnsfp, vcf_splice_annot,
+                               by = c("#chr" = "chr", "pos(1-based)" = "pos", "ref" = "ref", "alt" = "alt"))
 
   # reorder the columns to match the original vcf order (to prevent confusion b/c lots of chr/start columns in dbnsf output for different ref genomes)
-  vcf_post_dbnsfp <- vcf_post_dbnsfp[, c(1:7, 12:463)]
+  vcf_post_dbnsfp <- vcf_post_dbnsfp[, c(1:7, 12:763)]
 
   # rename/clean up the "vcf" columns so they will match the "vcf_post_dbnsfp" columns
   names(vcf)[names(vcf) == "Chr"] <- "chr"
@@ -173,6 +199,8 @@ proband_annotation <- function(input, output_dir) {
   names(vcf_post_dbnsfp)[names(vcf_post_dbnsfp) == "Eigen-phred_coding"] <- "Eigen_phred_coding"
   names(vcf_post_dbnsfp)[names(vcf_post_dbnsfp) == "Eigen-PC-phred_coding"] <- "Eigen_PC_phred_coding"
   names(vcf_post_dbnsfp)[names(vcf_post_dbnsfp) == "H1-hESC_fitCons_rankscore"] <- "H1_hESC_fitCons_rankscore"
+
+  write_tsv(vcf_post_dbnsfp, file.path(output_dir, paste0(patient_id, "dbnsfp_full.tsv")), na = ".", quote = FALSE)
 
   # make a list of the desired columns
   desired_columns <- c("chr",
@@ -243,7 +271,22 @@ proband_annotation <- function(input, output_dir) {
                        "phastCons30way_mammalian_rankscore",
                        "phastCons17way_primate_rankscore",
                        "SiPhy_29way_logOdds_rankscore",
-                       "bStatistic_converted_rankscore"
+                       "bStatistic_converted_rankscore",
+                       "SpliceAI_gene",
+                       "SpliceAI_DS_AG",
+                       "SpliceAI_DS_AL",
+                       "SpliceAI_DS_DG",
+                       "SpliceAI_DS_DL",
+                       "SpliceAI_DP_AG",
+                       "SpliceAI_DP_AL",
+                       "SpliceAI_DP_DG",
+                       "SpliceAI_DP_DL",
+                       "SpliceAI_AG",
+                       "SpliceAI_AL",
+                       "SpliceAI_DG",
+                       "SpliceAI_DL",
+                       "ada_score",
+                       "rf_score"
   )
 
   # get down to the desired (useful) columns
@@ -1007,12 +1050,14 @@ proband_annotation <- function(input, output_dir) {
   names(vcf)[names(vcf) == "#CHROM"] <- "chr"
 
   vcf <- select(vcf, address, chr, start, end, ref, alt, QUAL, FILTER, INFO, FORMAT, genotype, AF, Func.refGene,
-                gene, GeneDetail.refGene, ExonicFunc.refGene, AAChange.refGene, CADD16_PHRED, dbNSFP_count)
+                gene, GeneDetail.refGene, ExonicFunc.refGene, AAChange.refGene, CADD16_PHRED, dbNSFP_count,
+                SpliceAI_gene, SpliceAI_DS_AG, SpliceAI_DS_AL, SpliceAI_DS_DG, SpliceAI_DS_DL, SpliceAI_DP_AG,
+                SpliceAI_DP_AL, SpliceAI_DP_DG, SpliceAI_DP_DL, SpliceAI_AG, SpliceAI_AL, SpliceAI_DG, SpliceAI_DL,
+                ada_score, rf_score)
 
   #Step 6. LOEUF Annotation############################################################
 
-  gnomad_constraints <- read_delim(path_to_LOEUF_table, "\t", escape_double =
-    FALSE, trim_ws = TRUE)
+  gnomad_constraints <- read_delim(path_to_LOEUF_table, "\t", escape_double = FALSE, trim_ws = TRUE)
 
   gnomad_LOEUF <- subset(gnomad_constraints, select = c(gene, oe_lof_upper))
 
@@ -1240,6 +1285,9 @@ proband_annotation <- function(input, output_dir) {
                 end,
                 ref,
                 alt,
+                SpliceAI_gene, SpliceAI_DS_AG, SpliceAI_DS_AL, SpliceAI_DS_DG, SpliceAI_DS_DL, SpliceAI_DP_AG,
+                SpliceAI_DP_AL, SpliceAI_DP_DG, SpliceAI_DP_DL, SpliceAI_AG, SpliceAI_AL, SpliceAI_DG, SpliceAI_DL,
+                ada_score, rf_score
   )
 
   #save the annotated VCF, ready for Part 3 (filtering)
