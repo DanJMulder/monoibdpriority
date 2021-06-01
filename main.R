@@ -31,7 +31,7 @@ library(data.table)
 is.specified <- function(value) {
   return(!is.na(value) &&
            (value != "NA" || value != "unknown") &&
-           length(value) > 0)
+           str_length(value) > 0)
 }
 
 # Helper function to help determine how many lines a VCF header contains, includes the column names
@@ -131,8 +131,8 @@ proband_annotation <- function(input, output_dir) {
   # Running dbNSFP java applet via command line to add dbNSFP annotations
   # Note, changing the directory here does not affect R's current working directory.
   # We need to use a slightly different command in order to run without any GUIs
-  dbnsfp_phrase <- as.character(paste("module load java; cd", path_to_dbNSFP4.1a,
-                                      "; java search_dbNSFP41a -s -i", input_in, "-o", dbnsfp_output, "-v hg38"))
+  dbnsfp_phrase <- as.character(paste("cd", path_to_dbNSFP4.2a,
+                                      "; java search_dbNSFP42a -s -i", input_in, "-o", dbnsfp_output, "-v hg38"))
   if (!file.exists(dbnsfp_output) ||
     !file.exists(dbscsnv_output) ||
     !file.exists(spliceai_output)) {

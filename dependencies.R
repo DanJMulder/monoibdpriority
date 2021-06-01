@@ -1,6 +1,6 @@
 ## Paths to tools and databases
 # 1. change to the folder containing the dbNSFP4.1a java applet (search_dbNSFP41a.class)
-path_to_dbNSFP4.1a <- "/path/to/dbNSFP4.1a"
+path_to_dbNSFP4.2a <- "/path/to/dbNSFP4.2a"
 # 2. change the lines below to the folder containing the annovar libraries and db
 path_to_annovar <- "/path/to/annovar"
 path_to_annovar_db <- "/path/to/annovar/humandb"
