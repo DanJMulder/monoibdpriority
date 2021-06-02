@@ -311,14 +311,14 @@ proband_annotation <- function(input, output_dir) {
   names(vcf)[names(vcf) == "ref.x"] <- "ref"
   names(vcf)[names(vcf) == "alt.x"] <- "alt"
   vcf <- subset(vcf, select = -c(chr.y, start.y, ref.y, alt.y))
-  vcf <- vcf[, c(2:75, 1)]
+  vcf <- vcf[, c(2:90, 1)]
 
   # Step 3. Add maf and RefSeq annotations via annovar ####
 
-  # Calculate/add the "end" column so appropriate for annovar input
+  # Calculate/add the "end" column so appropriate for annovar input, drop variant_length
   vcf$variant_length <- nchar(vcf$alt) - 1
   vcf$end <- vcf$start + vcf$variant_length
-  vcf <- vcf[, c(1, 2, 77, 3:75)]
+  vcf <- vcf[, c(1, 2, 92, 3:90)]
 
   annovar_save <- file.path(output_dir, paste0(patient_id, ".txt"))
   annovar_out_prefix <- file.path(output_dir, patient_id)
@@ -1263,8 +1263,6 @@ proband_annotation <- function(input, output_dir) {
   vcf[vcf == "."] <- NA
 
   vcf$AF <- as.numeric(vcf$AF)
-
-  # vcf <- subset(vcf, select = -c(chrom))
 
   vcf <- select(vcf, gene,
                 Func.refGene,
