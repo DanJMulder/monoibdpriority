@@ -107,7 +107,8 @@ proband_annotation <- function(input, output_dir) {
 
   # Load the vcf into R
   vcf <- read_delim(input, "\t", escape_double = FALSE, trim_ws = TRUE,
-                    skip = vcf_header_count(input) - 1, col_types = cols('#CHROM' = col_factor()))
+                    skip = vcf_header_count(input) - 1,
+                    col_types = cols('#CHROM' = col_factor(), 'QUAL' = col_character()))
   names(vcf)[names(vcf) == "#CHROM"] <- "Chr"
 
   # Remove the 'chr' from the start of the chromosome column
@@ -160,14 +161,15 @@ proband_annotation <- function(input, output_dir) {
                                              'hg38_chr' = col_factor())) %>% select(chr:rf_score) # Unique columns
   # Attached database SpliceAI
   vcf_spliceai <- read_delim(spliceai_output, delim = "\t",
-                            escape_double = FALSE, col_names = TRUE,
-                            trim_ws = TRUE, na = ".", guess_max = 200000,
-                            col_types = cols('chr' = col_factor())) %>% select(chr:SpliceAI_DL) # Unique columns
+                             escape_double = FALSE, col_names = TRUE,
+                             trim_ws = TRUE, na = ".", guess_max = 200000,
+                             col_types = cols('chr' = col_factor())) %>% select(chr:SpliceAI_DL) # Unique columns
 
   # Merge splice annotations
   vcf_splice_annot <- full_join(vcf_spliceai, vcf_dbscsnv,
                                 by = c("chr" = "hg38_chr", "pos" = "hg38_pos", "ref" = "ref", "alt" = "alt")) %>%
-    select(-c(chr.y, pos.y)) %>% group_by(chr, pos, ref, alt) %>%
+    select(-c(chr.y, pos.y)) %>%
+    group_by(chr, pos, ref, alt) %>%
     summarize_all(list(~paste(na.omit(.), collapse = ";")))
 
   # Merge with main annotation from dbnsfp
