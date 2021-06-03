@@ -311,14 +311,14 @@ proband_annotation <- function(input, output_dir) {
   names(vcf)[names(vcf) == "ref.x"] <- "ref"
   names(vcf)[names(vcf) == "alt.x"] <- "alt"
   vcf <- subset(vcf, select = -c(chr.y, start.y, ref.y, alt.y))
-  vcf <- vcf[, c(2:90, 1)]
+  vcf <- vcf[, c(2:89, 1)]
 
   # Step 3. Add maf and RefSeq annotations via annovar ####
 
   # Calculate/add the "end" column so appropriate for annovar input, drop variant_length
   vcf$variant_length <- nchar(vcf$alt) - 1
   vcf$end <- vcf$start + vcf$variant_length
-  vcf <- vcf[, c(1, 2, 92, 3:90)]
+  vcf <- vcf[, c(1, 2, 91, 3:89)]
 
   annovar_save <- file.path(output_dir, paste0(patient_id, ".txt"))
   annovar_out_prefix <- file.path(output_dir, patient_id)
@@ -1052,7 +1052,7 @@ proband_annotation <- function(input, output_dir) {
   vcf <- select(vcf, address, chr, start, end, ref, alt, QUAL, FILTER, INFO, FORMAT, genotype, AF, Func.refGene,
                 gene, GeneDetail.refGene, ExonicFunc.refGene, AAChange.refGene, CADD16_PHRED, dbNSFP_count,
                 SpliceAI_gene, SpliceAI_DS_AG, SpliceAI_DS_AL, SpliceAI_DS_DG, SpliceAI_DS_DL, SpliceAI_DP_AG,
-                SpliceAI_DP_AL, SpliceAI_DP_DG, SpliceAI_DP_DL, SpliceAI_AG, SpliceAI_AL, SpliceAI_DG, SpliceAI_DL,
+                SpliceAI_DP_AL, SpliceAI_DP_DG, SpliceAI_DP_DL,
                 ada_score, rf_score)
 
   #Step 6. LOEUF Annotation############################################################
