@@ -75,17 +75,17 @@ source activate ibd_script
 # 2. Missing genotypes filled with reference
 # 3. Genotype must have at least one alt allele
 if [ ! -r proband.vcf ]; then
-  bcftools view -s "${proband_name}" -a -O u "${vcf}" | \
+  bcftools view -s "${proband_name}" -m2 -M2 -O u "${vcf}" | \
     bcftools +setGT - -- -t . -n 0 | \
     bcftools view -O v -o proband.vcf -i 'GT="alt"' -;
 fi
 if [ ! -r maternal.vcf ] && [ -n "${maternal_name}" ]; then
-  bcftools view -s "${maternal_name}" -a -O u "${vcf}" | \
+  bcftools view -s "${maternal_name}" -m2 -M2 -O u "${vcf}" | \
     bcftools +setGT - -- -t . -n 0 | \
     bcftools view -O v -o maternal.vcf -i 'GT="alt"' -;
 fi
 if [ ! -r paternal.vcf ] && [ -n "${paternal_name}" ]; then
-  bcftools view -s "${paternal_name}" -a -O u "${vcf}" | \
+  bcftools view -s "${paternal_name}" -m2 -M2 -O u "${vcf}" | \
     bcftools +setGT - -- -t . -n 0 | \
     bcftools view -O v -o paternal.vcf -i 'GT="alt"' -;
 fi
