@@ -1250,9 +1250,9 @@ proband_annotation <- function(input, output_dir) {
   vcf$het_or_hom <- substring(het_or_hom, 1, 3)
   vcf$het_or_hom <- as.factor(vcf$het_or_hom)
 
-  vcf$het_or_hom <- gsub('0/1', 'het', vcf$het_or_hom)
-  vcf$het_or_hom <- gsub('1/1', 'hom_alt', vcf$het_or_hom)
-  vcf$het_or_hom <- gsub('1/2', 'hom_alt', vcf$het_or_hom)
+  vcf$het_or_hom <- gsub('0[/|]1', 'het', vcf$het_or_hom, perl = TRUE)
+  vcf$het_or_hom <- gsub('1[/|]1', 'hom_alt', vcf$het_or_hom, perl = TRUE)
+  vcf$het_or_hom <- gsub('1[/|]2', 'hom_alt', vcf$het_or_hom, perl = TRUE)
   vcf$het_or_hom <- as.factor(vcf$het_or_hom)
 
   rm(het_or_hom)
